@@ -1,8 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) JGC, v0.9.8, 29.1.2020
-# (Trying Ruby code for the first time, and going OO too!)
+# (c) Jonathan Clark, v1.0.0, 22.2.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -16,14 +15,17 @@
 #
 # Can also show a list of projects.
 #
-# Requires 'gem install fuzzy_match' 
+# Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
 # TODOs
-# * [ ] Fail gracefully when no npClean script available
-# * [ ] Try changing @start(date), @due(date) etc. to @start/date etc.
+# * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
 # * [ ] order 'other active' by due date [done] then title
-# * [ ] in file read operations in initialize, cope with EOF errors
-# * [ ] Make cancelled part of archive not active
+# * [ ] fail gracefully when no npClean script available
+# * [ ] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
+# * [x] add a way to review in an order I want
+# * [x] Make cancelled part of active not active (e.g. Home Battery)
+# * [x] review the 'Articles & Publicity' seems to fire wrongly; escaping in the x-callback-url?
+# * [x] put total of tasks to review as summary on 'v'
 # * [x] see if colouration is possible (https://github.com/fazibear/colorize)
 # * [x] in 'e' cope with no fuzzy match error
 # * [x] Fix next (r)eview item opening wrong note
@@ -32,7 +34,7 @@
 # * [x] create some stats from all open things
 # * [x] Fix next (r)eview item not coming in same order as listed
 # * [x] after pressing 'a' the list of Archived ones is wrong
-# * [x] run npClean after a review
+# * [x] run npClean after a review -- and then get this to run after each individual note edit
 # * [x] separate parts to a different script daily crawl to fix various things
 #----------------------------------------------------------------------------------
 
@@ -56,25 +58,24 @@ summaryFilename = Date.today.strftime("%Y%m%d") + " Notes summary.md"
 Username = 'jonathan' # set manually, as automated methods don't seek to work.
 StorageType = "iCloud"	# or Dropbox
 TagsToFind = ["@admin", "@facilities", "@CWs", "@cfl", "@yfl", "@secretary", "@JP", "@martha", "@church"]
-NPCleanScriptPath = "/Users/jonathan/Dropbox/m/npClean.rb"
-
-# Colours
-#String.color_samples	# to show some possible combinations
-#puts String.modes		# returns list of colorization modes
-CancelledColour = :magenta
-CompletedColour = :light_green
-ReviewNeededColour = :light_red
-PGEffect = :underline
-ActiveColour = :light_yellow
-WarningColour = :red
-String.disable_colorization false
-
-User = Etc.getlogin		# for debugging when running by launchctl
+NPCleanScriptPath = "/Users/jonathan/bin/npClean"
 if ( StorageType == "iCloud" )
 	NoteplanDir = "/Users/#{Username}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
 else
 	NoteplanDir = "/Users/#{Username}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
 end
+User = Etc.getlogin		# for debugging when running by launchctl
+
+# Colours, using the colorization gem
+# to show some possible combinations, run	String.color_samples
+# to show list of possible modes, run 	puts String.modes  (e.g. underline, bold, blink)
+String.disable_colorization false
+CancelledColour = :light_magenta
+CompletedColour = :light_green
+ReviewNeededColour = :light_red
+ActiveColour = :light_yellow
+WarningColour = :light_red
+InstructionColour = :light_cyan
 
 # other globals
 notes = Array.new	# to hold all our note objects
@@ -98,15 +99,16 @@ class NPNote
 	attr_reader :nextReviewDate
 	attr_reader :reviewInterval
 	attr_reader :isActive
-	attr_reader :dueDate
-	attr_reader :metadataLine
+	attr_reader :isCancelled
 	attr_reader :isProject
 	attr_reader :isGoal
 	attr_reader :toReview
+	attr_reader :metadataLine
+	attr_reader :dueDate
 	attr_reader :open
 	attr_reader :waiting
 	attr_reader :done
-	
+	attr_reader :filename
 	
 	def initialize(this_file, id)
 		# initialise instance variables (that persist with the class instance)
@@ -212,7 +214,7 @@ class NPNote
 		when 'q'
 			daysToAdd = num*90
 		else
-			puts "Error in calc_next_review from #{last} by #{interval}"
+			puts "Error in calc_next_review from #{last} by #{interval}".colorize(WarningColour)
 		end
 		newDate = last + daysToAdd
 		return newDate
@@ -249,8 +251,9 @@ class NPNote
 	end
 	
 	def open_note
-		# Use x-callback scheme to open this note in NotePlan
-		# noteplan://x-callback-url/openNote?noteTitle=...
+		# Use x-callback scheme to open this note in NotePlan,
+		# as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
+		#   noteplan://x-callback-url/openNote?noteTitle=...
 		# Open a note identified by the title or date.
 		# Parameters:
 		# noteDate optional to identify the calendar note in the format YYYYMMDD like '20180122'.
@@ -259,7 +262,8 @@ class NPNote
 		#   Searches first general notes, then calendar notes for the filename.
 		#   If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
 		uri = "noteplan://x-callback-url/openNote?noteTitle=#{@title}"
-		response = %x[open "#{uri}"]
+		uriEncoded = URI.escape(uri, " &")	# by default & isn't escaped, so change that
+		response = %x[open "#{uriEncoded}"]
 		# Would prefer to use the following sorts of method, but can't get them to work.
 		# Asked at https://stackoverflow.com/questions/57161971/how-to-make-x-callback-url-call-to-local-app-in-ruby but no response.
 		#   uriEncoded = URI.escape(uri)
@@ -314,8 +318,8 @@ class NPNote
 			end
 		}
 
-		puts "       ... Updated \"#{@title}\" note."
-	end
+		print "Updated review date.\n" # " for " + "#{@title}".bold
+		end
 
 	def list_waiting_tasks
 		# List any tasks that are marked as #waiting and aren't [x] or @done
@@ -371,26 +375,44 @@ end
 # save summary file, open note in NP
 #---------------------------------------------------------------------------
 quit = false
-verb = "v"	# get going with this first list reviews action automatically
+verb = "a"	# get going by reading and summarising all notes
 reviewNumber = 0
-input = searchString = ''
+input = ""
+searchString = fm = bestMatch = nil
 titleList = Array.new
-notesToReview = Array.new
+notesToReview = Array.new		# list of ID of notes overdue for review
 notesToReviewOrdered = Array.new
-notesActive = Array.new 
-notesActiveOrdered = Array.new
-notesArchived = Array.new
-notesAllOrdered = Array.new
+notesOtherActive = Array.new  	# list of ID of other active notes 
+notesOtherActiveOrdered = Array.new
+notesArchived = Array.new			# list of ID of archived notes 
+notesAllOrdered = Array.new		# list of IDs of all notes (used for summary writer)
 
 while !quit
+	# get title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring') if present
+	if (input.length > 0) 
+		searchString = input[1..(input.length-2)]
+		# from list of titles, try and match
+		i = 0
+		notes.each do |n|
+			titleList[i] = n.title
+			i += 1
+		end
+		fm = FuzzyMatch.new(titleList)
+		bestMatch = fm.find(searchString)
+	else
+		bestMatch = nil
+	end
+
+	# Decide what Command to run ...
 	case verb
 	when 'p'
 		# Show project summary
-		puts "\n--------------------------------------- Projects List ------------------------------------------"
+		puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
+		puts "--------------------------------------- Projects List ------------------------------------------"
 		notes.each do |n|
 			n.print_summary	if (n.isProject)
 		end
-		puts "\n---------------------------------------- Goals List -------------------------------------------"
+		puts "\n---------------------------------------- Goals List --------------------------------------------"
 		notes.each do |n|
 			n.print_summary	if (n.isGoal)
 		end
@@ -403,25 +425,25 @@ while !quit
 		notes.clear()  # clear if not already empty
 		notesToReview.clear()
 		notesToReviewOrdered.clear()
-		notesActive.clear() 
-		notesActiveOrdered.clear()
+		notesOtherActive.clear()
+		notesOtherActiveOrdered.clear()
 		notesArchived.clear()
 		notesAllOrdered.clear()
 
 		# Read metadata for all note files in the NotePlan directory
 		Dir.glob("*.txt").each do |this_file|
 			notes[i] = NPNote.new(this_file,i)
-			# nrd = notes[i].nextReviewDate 
-			if (notes[i].isActive)
-				if (notes[i].toReview) 
-					notesToReview.push(notes[i].id) # Save list of notes overdue for review
+			nrd = notes[i].nextReviewDate 
+			if ((notes[i].isActive) and ( !notes[i].isCancelled))
+				if ((nrd) and (nrd <= TodaysDate)) 
+					notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
 				else
-					notesActive.push(notes[i].id) # Save list of other active notes
+					notesOtherActive.push(notes[i].id) # Save list of other active notes
 				end
 			else
-				notesArchived.push(notes[i].id) # Save list of archived (completed or cancelled) notes
+				notesArchived.push(notes[i].id) # Save list of in-active notes
 			end
-			i += 1
+		i += 1
 		end
 
 		# Reset list of reviewed notes, as re-parsed list
@@ -432,121 +454,75 @@ while !quit
 		# https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
 		# Can do multiples using [s.dueDate, s....]
 		notesToReviewOrdered = notesToReview.sort_by { |s| notes[s].nextReviewDate }
-		notesActiveOrdered = notesActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate : EarlyDate }	# to get around problem of nil entries breaking any comparison
+		notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate : EarlyDate }	# to get around problem of nil entries breaking any comparison
 		notesAllOrdered = notes.sort_by { |s| s.title }	# simpler, as defaults to alphanum sort
 
 		# Now output the notes with ones needing review first,
 		# then ones which are active, then the rest
-		puts "     Title                                        Opn Wat Don Due       Completed Int  NxtReview"
-		puts "------------------------------ Ready to review -------------------------------------------------"
-		notesToReviewOrdered.each do |n| 
-			notes[n].print_summary
-		end
-		puts "------------------------------- Other Active ---------------------------------------------------"
-		notesActiveOrdered.each do |n| 
-			notes[n].print_summary
-		end
+		puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
 		puts "-------------------------------- Not Active ----------------------------------------------------"
 		notesArchived.each do |n| 
 			notes[n].print_summary
 		end
-		puts "---------------------------- ACTIVE NOTE TOTALS ------------------------------------------------"
+		puts "------------------------------- Other Active ---------------------------------------------------"
+		notesOtherActiveOrdered.each do |n| 
+			notes[n].print_summary
+		end
+		puts "------------------------------ Ready to review -------------------------------------------------"
+		notesToReviewOrdered.each do |n| 
+			notes[n].print_summary
+		end
+		puts "------------------------------------------------------------------------------------------------"
 		no = 0
 		nw = 0
 		nd = 0
-		notesActive.each do |n|
+		notesOtherActive.each do |n|
 			nd += notes[n].done
 			nw += notes[n].waiting
 			no += notes[n].open
 		end
-		puts "    #{notesActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks."
-		puts "    + #{notesArchived.count} archived notes"
+		puts "     #{notesOtherActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks.   #{notesArchived.count} archived notes"
 
 
 	when 'v'
 		# Show all notes to review
-		# First, (re)parse the data files
-		Dir::chdir(NoteplanDir+'/Notes/')
-		notes.clear()  # clear if not already empty
-		notesToReview.clear()
-		notesToReviewOrdered.clear()
-		notesActive.clear()
-		notesActiveOrdered.clear()
-		notesArchived.clear()
-		notesAllOrdered.clear()
-		i = 0
-		
-		# Read metadata for all note files in the NotePlan directory
-		Dir.glob("*.txt").each do |this_file|
-			notes[i] = NPNote.new(this_file,i)
-			nrd = notes[i].nextReviewDate 
-			if (notes[i].isActive)
-				if ((nrd) and (nrd <= TodaysDate)) 
-					notesToReview.push(notes[i].id) # Save list of notes overdue for review
-				else
-					notesActive.push(notes[i].id) # Save list of other active notes
-				end
-			else
-				notesArchived.push(notes[i].id) # Save list of in-active notes
-			end
-			i += 1
-		end
-
-		# Order notes by different fields
-		# Info: https://stackoverflow.com/questions/882070/sorting-an-array-of-objects-in-ruby-by-object-attribute
-		# https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
-		# Can do multiples using [s.dueDate, s....]
-		notesToReviewOrdered = notesToReview.sort_by { |s| notes[s].nextReviewDate }	
-		notesActiveOrdered = notesActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate : EarlyDate }	# to get around problem of nil entries breaking any comparison
-		notesAllOrdered = notes.sort_by { |s| s.title }	# note simpler, as defaults to alphanum sort
-
-		# Now output the notes with ones needing review first,
-		# then ones which are active, then the rest
-		puts "     Title                                        Opn Wat Don Due       Completed Int  NxtReview"
-		puts "------------------------- Ready to review ------------------------------------------------------"
+		puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
+		puts "------------------------------ Ready to review -------------------------------------------------"
 		notesToReviewOrdered.each do |n| 
 			notes[n].print_summary
 		end
-		# reset review count as we have re-parsed
-		reviewNumber = 0
+		# show summary count
+		puts "     (Total: #{notesToReview.count} notes)".colorize(ActiveColour)
 
 	
 	when 'c'
-		# go and run the clean up script, npClean
+		# go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
 		success = system("ruby",NPCleanScriptPath)
 	
 
 	when 'e'
 		# edit the note
 		# use title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring')
-		searchString = input[1..(input.length-2)]
-		# from list of titles, try and match
-		i = 0
-		notes.each do |n|
-			titleList[i] = n.title
-			i += 1
-		end
-		fm = FuzzyMatch.new(titleList)
-		bestMatch = fm.find(searchString)
 		if (bestMatch) then
 			puts "   Opening closest match note '#{bestMatch}'"
 			noteID = titleList.find_index(bestMatch)
 			notes[noteID].open_note
 		else
 			puts "   Warning: Couldn't find a note matching '#{searchString}'".colorize(WarningColour)
-			end
+		end
+
 
 	when 'l'
 		# Show @people annotations for those listed in atTags
 		puts "\n----------------------------- People Mentioned ----------------------------------------------"
 		TagsToFind.each do |p|
 			puts 
-			puts "#{p} mentions ---------------------------------"
+			puts "#{p} mentions:".bold
 
 			notesToReviewOrdered.each do |n| 
 				notes[n].list_person_mentioned(p)
 			end
-			notesActiveOrdered.each do |n| 
+			notesOtherActiveOrdered.each do |n| 
 				notes[n].list_person_mentioned(p)
 			end
 		end
@@ -559,21 +535,54 @@ while !quit
 
 
 	when 'r'
-		# Open the next note that needs reviewing
-		if ( reviewNumber < notesToReviewOrdered.length )
-			noteIDToReview = notesToReviewOrdered[reviewNumber]
-			notes[noteIDToReview].open_note
-
-			puts "       Press any key when finished reviewing '#{notes[noteIDToReview].title}' ..."
+		# If no extra characters given, then open the next note that needs reviewing
+		if (bestMatch)
+			noteID = titleList.find_index(bestMatch)
+			notes[noteID].open_note
+			# puts "       Reviewing closest match note '#{bestMatch}' ... press any key when finished."
+			print "  Reviewing closest match note " + "#{bestMatch}". bold + " ... press any key when finished. "
 			gets
 
-			# Update the note just reviewed and update its @reviewed() date
-			notes[noteIDToReview].update_last_review_date
-			reviewNumber += 1
+			# update the @reviewed() date for the note just reviewed
+			notes[noteID].update_last_review_date
+			# Attempt to remove this from notesToReivewOrdered
+			notesToReview.delete(noteID)
+			notesToReviewOrdered.delete(noteID)
+			notesOtherActive.push(noteID)
+			notesOtherActiveOrdered.push(noteID)
+			# Clean up this file
+			begin
+				success = system("ruby", NPCleanScriptPath, notes[noteID].filename)
+			rescue
+				puts "  Error trying to clean ".colorize(WarningColour) + "#{notes[noteID].title}".colorize(WarningColour).bold
+			end
 		else
-			puts "       Sorry; no more notes to review."
+			if ( notesToReviewOrdered.length > 0 )
+				noteIDToReview = notesToReviewOrdered.first
+				notes[noteIDToReview].open_note
+				# puts "       Press any key when finished reviewing '#{notes[noteIDToReview].title}' ..."
+				print "  Reviewing " + "#{notes[noteIDToReview].title}".bold + " ... press any key when finished. "
+				gets
+
+				# update the @reviewed() date for the note just reviewed
+				notes[noteIDToReview].update_last_review_date
+				# move this from notesToReview to notesOtherActive
+				#reviewNumber += 1 # @@@ remove this in time
+				notesToReview.delete(noteIDToReview)
+				notesToReviewOrdered.delete(noteIDToReview)
+				notesOtherActive.push(noteIDToReview)
+				notesOtherActiveOrdered.push(noteIDToReview)
+				# Clean up this file
+				begin
+					success = system("ruby", NPCleanScriptPath, notes[noteIDToReview].filename)
+				rescue
+					puts "  Error trying to clean ".colorize(WarningColour) + "#{notes[noteIDToReview].title}".colorize(WarningColour).bold
+				end
+			else
+				puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
+			end
 		end
-	
+
 
 	when 's' 
 		# write out the unordered summary to summaryFilename, temporarily redirecting stdout
@@ -591,38 +600,35 @@ while !quit
 		no = 0
 		nw = 0
 		nd = 0
-		notesActive.each do |n| # @@@ WHY doesn't notesAllOrdered work here?
+		notesOtherActive.each do |n| # @@@ WHY doesn't notesAllOrdered work here?
 			nd += notes[n].done
 			nw += notes[n].waiting
 			no += notes[n].open
 		end
-		puts "    #{notesActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks."
-		puts "    + #{notesArchived.count} archived notes"
+		puts "    #{notesOtherActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks.  + #{notesArchived.count} archived notes"
 
 		$stdout = old_stdout
 		sf.close
-		puts "    Written summary to #{summaryFilename}"
+		puts "    Written summary to " + "#{summaryFilename}".bold
 
 
 	when 'w'
 		# list @waiting items in open notes
-		puts "\n---------------------------- #Waiting Tasks ----------------------------------------------"
+		puts "\n-------------------------------------- #Waiting Tasks -----------------------------------------"
 		notesToReviewOrdered.each do |n| 
 			notes[n].list_waiting_tasks
 		end
-		notesActiveOrdered.each do |n| 
+		notesOtherActiveOrdered.each do |n| 
 			notes[n].list_waiting_tasks
 		end
 
 	else
-		puts "   ** Invalid action! Please try again."
+		puts "   Invalid action! Please try again.".colorize(WarningColour)
 	end
 
 	# now ask again
-	print "\nview (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject list, (r)eview next, (s)ave summary,\n(v)iew those to review, (q)uit, list (w)aiting tasks  > "
+	print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject list,".colorize(InstructionColour)
+	print "\n(q)uit, (r)eview next, (s)ave summary, (v)iew those to review, list (w)aiting tasks  > ".colorize(InstructionColour)
 	input = gets
 	verb = input[0].downcase
 end
-
-# Run Clean up script
-success = system("ruby",NPCleanScriptPath)
