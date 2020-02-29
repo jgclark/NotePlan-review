@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.0.0, 22.2.2020
+# (c) Jonathan Clark, v1.0.2, 29.2.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -17,7 +17,9 @@
 #
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
-# TODOs
+# TODO:
+# * [ ] add extra space before @reviewed when adding for first time
+# * [x] for summary strip out the colorizing and output CSV instead
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
 # * [ ] order 'other active' by due date [done] then title
 # * [ ] fail gracefully when no npClean script available
@@ -29,13 +31,13 @@
 # * [x] see if colouration is possible (https://github.com/fazibear/colorize)
 # * [x] in 'e' cope with no fuzzy match error
 # * [x] Fix next (r)eview item opening wrong note
-# * [x] Save summary makes all [x]
-# * [x] log stats to a file
-# * [x] create some stats from all open things
+# * [x] Fix save summary makes all [x]
+# * [x] Log stats to summary file
+# * [x] Report some stats from all open things
 # * [x] Fix next (r)eview item not coming in same order as listed
-# * [x] after pressing 'a' the list of Archived ones is wrong
-# * [x] run npClean after a review -- and then get this to run after each individual note edit
-# * [x] separate parts to a different script daily crawl to fix various things
+# * [x] Fix after pressing 'a' the list of Archived ones is wrong
+# * [x] Run npClean after a review -- and then get this to run after each individual note edit
+# * [x] Separate parts to a different 'npClean' script daily crawl to fix various things
 #----------------------------------------------------------------------------------
 
 require 'date'
@@ -175,7 +177,7 @@ class NPNote
 			# Note if this is a #project or #goal
 			@isProject = true if (@metadataLine =~ /#project/)
 			@isGoal    = true if (@metadataLine =~ /#goal/)
-			# look for project ect codes (there might be several, so join with spaces), and make uppercase
+			# look for project etc codes (there might be several, so join with spaces), and make uppercase
 			# @@@ something wrong with regex but I can't see what, so removing the logic
 			# @metadataLine.scan(/[PpFfSsWwBb][0-9]+/)	{ |m| @codes = m.join(' ').downcase }
 			# If no codes given, but this is a goal or project, then use a basic code
@@ -248,6 +250,25 @@ class NPNote
 		else
 			puts out.colorize(colour)
 		end
+	end
+	
+	def print_summary_to_file
+		# print summary of this note in one line as a CSV file line
+		endDateFormatted = completeDateFormatted = nextReviewDateFormatted = ""
+		# Pretty print a summary for this NP note
+		mark="[x]"
+		effect = nil
+		if (@isActive)
+			mark="[ ]"
+		end
+		if (@isCancelled)
+			mark = "[-]"
+		end
+		endDateFormatted = @dueDate ? @dueDate.strftime(DateFormat) : ""
+		completeDateFormatted = @completeDate ? @completeDate.strftime(DateFormat) : ""
+		nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DateFormat) : ""
+		out = sprintf("%s %s,%s,%d,%d,%d,%s,%s,%s,%s", mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
+		puts out
 	end
 	
 	def open_note
@@ -593,19 +614,20 @@ while !quit
 		$stdout = sf
 		puts "# NotePlan Notes summary, #{timeNow.to_s}"
 		notesAllOrdered.each do |n| 
-			n.print_summary
+			n.print_summary_to_file
 		end
 
-		puts "----------------------------------- NOTE TOTALS ------------------------------------------------"
 		no = 0
 		nw = 0
 		nd = 0
-		notesOtherActive.each do |n| # @@@ WHY doesn't notesAllOrdered work here?
+		notesOtherActive.each do |n| # WHY doesn't notesAllOrdered work here?
 			nd += notes[n].done
 			nw += notes[n].waiting
 			no += notes[n].open
 		end
-		puts "    #{notesOtherActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks.  + #{notesArchived.count} archived notes"
+		puts "# Totals"
+		puts "Notes: #{notesOtherActive.count} active, #{notesArchived.count} archived"
+		puts "Tasks: #{no} open, #{nw} waiting, #{nd} done"
 
 		$stdout = old_stdout
 		sf.close
