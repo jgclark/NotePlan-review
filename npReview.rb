@@ -20,6 +20,7 @@
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
 # TODO:
+# * [ ] add ability to find and review notes in folders (from NP v2.5)
 # * [ ] summary outputs to distinguish archived from complete notes
 # * [ ] add extra space before @reviewed when adding for first time
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
@@ -59,15 +60,15 @@ EarlyDate = Date.new(1970, 1, 1)
 summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
-Username = 'jonathan' # set manually, as automated methods don't seek to work.
-StorageType = 'iCloud' # or Dropbox
-TagsToFind = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
+USERNAME = 'jonathan' # set manually, as automated methods don't seek to work.
+STORAGE_TYPE = 'iCloud' # or Dropbox
+TAGS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
 NPCleanScriptPath = '/Users/jonathan/bin/npClean'
 NPStatsScriptPath = '/Users/jonathan/bin/npStats'
-NoteplanDir = if StorageType == 'iCloud'
-                "/Users/#{Username}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
+NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
               else
-                "/Users/#{Username}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
+                "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               end
 User = Etc.getlogin # for debugging when running by launchctl
 
@@ -432,7 +433,7 @@ until quit
 
   when 'a'
     # (Re)parse the data files
-    Dir.chdir(NoteplanDir + '/Notes/')
+    Dir.chdir(NP_BASE_DIR + '/Notes/')
     i = 0
     notes.clear # clear if not already empty
     notesToReview.clear
@@ -537,7 +538,7 @@ until quit
   when 'l'
     # Show @people annotations for those listed in atTags
     puts "\n----------------------------- People Mentioned ----------------------------------------------"
-    TagsToFind.each do |p|
+    TAGS_TO_FIND.each do |p|
       puts
       puts "#{p} mentions:".bold
 
@@ -605,7 +606,7 @@ until quit
   when 's'
     # write out the unordered summary to summaryFilename, temporarily redirecting stdout
     # using 'w' mode which will truncate any existing file
-    Dir.chdir(NoteplanDir + '/Summaries/')
+    Dir.chdir(NP_BASE_DIR + '/Summaries/')
     sf = File.open(summaryFilename, 'w')
     old_stdout = $stdout
     $stdout = sf
