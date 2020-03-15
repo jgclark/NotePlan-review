@@ -3,7 +3,7 @@
 
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.1, 9.3.2020
+# (c) Jonathan Clark, v1.2, 15.3.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -13,7 +13,8 @@
 # - a @reviewInterval() field, using terms like '2m', '1w'
 #
 # Shows a summary of the notes, grouped by active and then closed.
-# The active ones also have a list of the number of open / waiting / closed tasks
+# The active ones also have a list of the number of open / waiting / closed tasks.
+# From NP v2.5 reads notes in folders too.
 #
 # Can also show a list of projects.
 #
@@ -22,11 +23,13 @@
 # TODO:
 # * [ ] add ability to find and review notes in folders (from NP v2.5)
 # * [ ] summary outputs to distinguish archived from complete notes
-# * [ ] add extra space before @reviewed when adding for first time
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
-# * [ ] order 'other active' by due date [done] then title
-# * [ ] fail gracefully when no npClean script available
-# * [ ] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
+#----------------------------------------------------------------------------------
+# DONE:
+# * [x] add extra space before @reviewed when adding for first time
+# * [x] order 'other active' by title
+# * [x] fail gracefully when no npClean script available
+# * [x] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
 # * [x] for summary strip out the colorizing and output CSV instead
 # * [x] add a way to review in an order I want
 # * [x] Make cancelled part of active not active (e.g. Home Battery)
@@ -63,8 +66,8 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 USERNAME = 'jonathan' # set manually, as automated methods don't seek to work.
 STORAGE_TYPE = 'iCloud' # or Dropbox
 TAGS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
-NPCleanScriptPath = '/Users/jonathan/bin/npClean'
-NPStatsScriptPath = '/Users/jonathan/bin/npStats'
+NP_CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'
+NP_STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'
 NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
               else
@@ -205,6 +208,8 @@ class NPNote
       rescue EOFError # this file is empty so ignore it
         puts "  Error: note #{this_file} is empty, so ignoring it.".colorize(WarningColour)
         # @@@ actually need to reject the file and this object entirely
+      rescue StandardError => e
+        puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
       end
     end
   end
@@ -296,21 +301,25 @@ class NPNote
   def update_last_review_date
     # Set the note's last review date to today's date
     # Open the file for read-write
-    f = File.open(@filename, 'r')
-    lines = []
-    n = 0
-    f.each_line do |line|
-      lines[n] = line
-      n += 1
+    begin
+      f = File.open(@filename, 'r')
+      lines = []
+      n = 0
+      f.each_line do |line|
+        lines[n] = line
+        n += 1
+      end
+      f.close
+      lineCount = n
+    rescue StandardError => e
+      puts "ERROR: Hit #{e.exception.message} when updating last review date for file #{@filename}".colorize(WarningColour)
     end
-    f.close
-    lineCount = n
 
     # in the metadata line, cut out the existing mention of lastReviewDate(...)
     metadata = lines[1]
     metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
     # and add new lastReviewDate(<today>)
-    metadata = "#{metadata.chomp}@reviewed(#{TodaysDate})" # feels like there ought to be a space between the items, but in practice not.
+    metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})" # feels like there ought to be a space between the items, but in practice not.
 
     # in the rest of the lines, do some clean up:
     n = 2
@@ -323,16 +332,20 @@ class NPNote
     end
 
     # open file and write all this data out
-    File.open(@filename, 'w') do |ff|
-      n = 0
-      lines.each do |line|
-        if n != 1
-          ff.puts line
-        else
-          ff.puts metadata
+    begin
+      File.open(@filename, 'w') do |ff|
+        n = 0
+        lines.each do |line|
+          if n != 1
+            ff.puts line
+          else
+            ff.puts metadata
+          end
+          n += 1
         end
-        n += 1
       end
+    rescue StandardError => e
+      puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
     end
 
     print "Updated review date.\n" # " for " + "#{@title}".bold
@@ -433,7 +446,6 @@ until quit
 
   when 'a'
     # (Re)parse the data files
-    Dir.chdir(NP_BASE_DIR + '/Notes/')
     i = 0
     notes.clear # clear if not already empty
     notesToReview.clear
@@ -444,19 +456,25 @@ until quit
     notesAllOrdered.clear
 
     # Read metadata for all note files in the NotePlan directory
-    Dir.glob('*.txt').each do |this_file|
-      notes[i] = NPNote.new(this_file, i)
-      nrd = notes[i].nextReviewDate
-      if notes[i].isActive && !notes[i].isCancelled
-        if nrd && (nrd <= TodaysDate)
-          notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
+    # (and sub-directories from v2.5)
+    begin
+      Dir.chdir(NP_BASE_DIR + '/Notes/')
+      Dir.glob('**/*.txt').each do |this_file|
+        notes[i] = NPNote.new(this_file, i)
+        nrd = notes[i].nextReviewDate
+        if notes[i].isActive && !notes[i].isCancelled
+          if nrd && (nrd <= TodaysDate)
+            notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
+          else
+            notesOtherActive.push(notes[i].id) # Save list of other active notes
+          end
         else
-          notesOtherActive.push(notes[i].id) # Save list of other active notes
+          notesArchived.push(notes[i].id) # Save list of in-active notes
         end
-      else
-        notesArchived.push(notes[i].id) # Save list of in-active notes
+        i += 1
       end
-      i += 1
+    rescue StandardError => e
+      puts "ERROR: Hit #{e.exception.message} when reading note file #{this_file}".colorize(WarningColour)
     end
 
     # Order notes by different fields
@@ -464,7 +482,7 @@ until quit
     # https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
     # Can do multiples using [s.dueDate, s....]
     notesToReviewOrdered = notesToReview.sort_by { |s| notes[s].nextReviewDate }
-    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate || EarlyDate } # to get around problem of nil entries breaking any comparison
+    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].title } # to get around problem of nil entries breaking any comparison
     notesAllOrdered = notes.sort_by(&:title) # simpler, as defaults to alphanum sort
 
     # Now output the notes with ones needing review first,
@@ -511,7 +529,7 @@ until quit
   when 'c'
     # go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
     begin
-      success = system('ruby', NPCleanScriptPath)
+      success = system('ruby', NP_CLEAN_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npClean script'.colorize(WarningColour)
     end
@@ -519,7 +537,7 @@ until quit
   when 't'
     # go and run the statistics script, npStats
     begin
-      success = system('ruby', NPStatsScriptPath)
+      success = system('ruby', NP_STATS_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npStats script'.colorize(WarningColour)
     end
@@ -573,7 +591,7 @@ until quit
       notesOtherActiveOrdered.push(noteID)
       # Clean up this file
       begin
-        success = system('ruby', NPCleanScriptPath, notes[noteID].filename)
+        success = system('ruby', NP_CLEAN_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
         puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
@@ -594,7 +612,7 @@ until quit
         notesOtherActiveOrdered.push(noteIDToReview)
         # Clean up this file
         begin
-          success = system('ruby', NPCleanScriptPath, notes[noteIDToReview].filename)
+          success = system('ruby', NP_CLEAN_SCRIPT_PATH, notes[noteIDToReview].filename)
         rescue StandardError
           puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDToReview].title.to_s.colorize(WarningColour).bold
         end
