@@ -3,7 +3,7 @@
 
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2, 15.3.2020
+# (c) Jonathan Clark, v1.2.1, 19.3.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -14,19 +14,20 @@
 #
 # Shows a summary of the notes, grouped by active and then closed.
 # The active ones also have a list of the number of open / waiting / closed tasks.
-# From NP v2.5 reads notes in folders too.
+# From NotePlan v2.5 it also covers notes in sub-directories, but ignores notes
+# in the special @Archive and @Trash sub-directories (or others beginning @).
 #
 # Can also show a list of projects.
 #
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
 # TODO:
-# * [ ] add ability to find and review notes in folders (from NP v2.5)
-# * [ ] summary outputs to distinguish archived from complete notes
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
 #----------------------------------------------------------------------------------
 # DONE:
+# * [x] Issue 1: add ability to find and review notes in folders (from NP v2.5)
 # * [x] add extra space before @reviewed when adding for first time
+# * [x] summary outputs to distinguish archived from complete notes
 # * [x] order 'other active' by title
 # * [x] fail gracefully when no npClean script available
 # * [x] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
@@ -456,10 +457,12 @@ until quit
     notesAllOrdered.clear
 
     # Read metadata for all note files in the NotePlan directory
-    # (and sub-directories from v2.5)
+    # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
       Dir.chdir(NP_BASE_DIR + '/Notes/')
       Dir.glob('**/*.txt').each do |this_file|
+        next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
+
         notes[i] = NPNote.new(this_file, i)
         nrd = notes[i].nextReviewDate
         if notes[i].isActive && !notes[i].isCancelled
