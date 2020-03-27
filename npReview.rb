@@ -19,6 +19,7 @@
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
 # TODO:
+# * [ ] add ability to find and review notes in folders (from NP v2.5) [issue 1]
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
 #----------------------------------------------------------------------------------
 # DONE:
