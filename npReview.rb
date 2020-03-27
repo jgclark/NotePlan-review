@@ -1,6 +1,4 @@
 #!/usr/bin/ruby
-# frozen_string_literal: true
-
 #----------------------------------------------------------------------------------
 # NotePlan project review
 # (c) Jonathan Clark, v1.2.1, 19.3.2020
@@ -27,24 +25,19 @@
 # DONE:
 # * [x] Issue 1: add ability to find and review notes in folders (from NP v2.5)
 # * [x] add extra space before @reviewed when adding for first time
-# * [x] summary outputs to distinguish archived from complete notes
+# * [x] make summary outputs to distinguish archived from complete notes
 # * [x] order 'other active' by title
 # * [x] fail gracefully when no npClean script available
 # * [x] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
 # * [x] for summary strip out the colorizing and output CSV instead
-# * [x] add a way to review in an order I want
+# * [x] extend 'r' action to review particular notes, not just the next in the list
 # * [x] Make cancelled part of active not active (e.g. Home Battery)
-# * [x] review the 'Articles & Publicity' seems to fire wrongly; escaping in the x-callback-url?
 # * [x] put total of tasks to review as summary on 'v'
-# * [x] see if colouration is possible (https://github.com/fazibear/colorize)
+# * [x] add colourisation of important output
 # * [x] in 'e' cope with no fuzzy match error
-# * [x] Fix next (r)eview item opening wrong note
-# * [x] Fix save summary makes all [x]
 # * [x] Log stats to summary file
 # * [x] Report some stats from all open things
-# * [x] Fix next (r)eview item not coming in same order as listed
-# * [x] Fix after pressing 'a' the list of Archived ones is wrong
-# * [x] Run npClean after a review -- and then get this to run after each individual note edit
+# * [x] Run npClean after each individual note edit
 # * [x] Separate parts to a different 'npClean' script daily crawl to fix various things
 #----------------------------------------------------------------------------------
 
@@ -53,28 +46,28 @@ require 'time'
 require 'open-uri'
 require 'etc' # for login lookup
 require 'fuzzy_match' # gem install fuzzy_match
-require 'colorize' # for coloured output using https://github.com/fazibear/colorize
+require 'colorize' # gem install colorize (for coloured output using https://github.com/fazibear/colorize)
 
 # Constants
-DateFormat = '%d.%m.%y'
-DateTimeFormat = '%e %b %Y %H:%M'
+DateFormat = '%d.%m.%y'.freeze
+DateTimeFormat = '%e %b %Y %H:%M'.freeze
 timeNow = Time.now
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 EarlyDate = Date.new(1970, 1, 1)
 summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
-USERNAME = 'jonathan' # set manually, as automated methods don't seek to work.
-STORAGE_TYPE = 'iCloud' # or Dropbox
-TAGS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
-NP_CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'
-NP_STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'
+USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
+STORAGE_TYPE = 'iCloud'.freeze # or Dropbox
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
+CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'.freeze
+STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
 NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
               else
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               end
-User = Etc.getlogin # for debugging when running by launchctl
+USER = Etc.getlogin # for debugging when running by launchctl
 
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -465,12 +458,10 @@ until quit
 
         notes[i] = NPNote.new(this_file, i)
         nrd = notes[i].nextReviewDate
-        if notes[i].isActive && !notes[i].isCancelled
-          if nrd && (nrd <= TodaysDate)
-            notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
-          else
-            notesOtherActive.push(notes[i].id) # Save list of other active notes
-          end
+        next unless notes[i].isActive && !notes[i].isCancelled
+
+        if nrd && (nrd <= TodaysDate)
+          notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
         else
           notesArchived.push(notes[i].id) # Save list of in-active notes
         end
@@ -532,7 +523,7 @@ until quit
   when 'c'
     # go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
     begin
-      success = system('ruby', NP_CLEAN_SCRIPT_PATH)
+      success = system('ruby', CLEAN_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npClean script'.colorize(WarningColour)
     end
@@ -540,7 +531,7 @@ until quit
   when 't'
     # go and run the statistics script, npStats
     begin
-      success = system('ruby', NP_STATS_SCRIPT_PATH)
+      success = system('ruby', STATS_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npStats script'.colorize(WarningColour)
     end
@@ -559,7 +550,7 @@ until quit
   when 'l'
     # Show @people annotations for those listed in atTags
     puts "\n----------------------------- People Mentioned ----------------------------------------------"
-    TAGS_TO_FIND.each do |p|
+    MENTIONS_TO_FIND.each do |p|
       puts
       puts "#{p} mentions:".bold
 
@@ -594,7 +585,7 @@ until quit
       notesOtherActiveOrdered.push(noteID)
       # Clean up this file
       begin
-        success = system('ruby', NP_CLEAN_SCRIPT_PATH, notes[noteID].filename)
+        success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
         puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
@@ -615,7 +606,7 @@ until quit
         notesOtherActiveOrdered.push(noteIDToReview)
         # Clean up this file
         begin
-          success = system('ruby', NP_CLEAN_SCRIPT_PATH, notes[noteIDToReview].filename)
+          success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDToReview].filename)
         rescue StandardError
           puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDToReview].title.to_s.colorize(WarningColour).bold
         end
