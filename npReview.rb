@@ -1,6 +1,4 @@
 #!/usr/bin/ruby
-# frozen_string_literal: true
-
 #----------------------------------------------------------------------------------
 # NotePlan project review
 # (c) Jonathan Clark, v1.2, 15.3.2020
@@ -21,28 +19,23 @@
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
 # TODO:
-# * [ ] summary outputs to distinguish archived from complete notes
 # * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
 #----------------------------------------------------------------------------------
 # DONE:
+# * [x] make summary outputs to distinguish archived from complete notes
 # * [x] add extra space before @reviewed when adding for first time
 # * [x] order 'other active' by title
 # * [x] fail gracefully when no npClean script available
 # * [x] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
 # * [x] for summary strip out the colorizing and output CSV instead
-# * [x] add a way to review in an order I want
+# * [x] extend 'r' action to review particular notes, not just the next in the list
 # * [x] Make cancelled part of active not active (e.g. Home Battery)
-# * [x] review the 'Articles & Publicity' seems to fire wrongly; escaping in the x-callback-url?
 # * [x] put total of tasks to review as summary on 'v'
-# * [x] see if colouration is possible (https://github.com/fazibear/colorize)
+# * [x] add colourisation of important output
 # * [x] in 'e' cope with no fuzzy match error
-# * [x] Fix next (r)eview item opening wrong note
-# * [x] Fix save summary makes all [x]
 # * [x] Log stats to summary file
 # * [x] Report some stats from all open things
-# * [x] Fix next (r)eview item not coming in same order as listed
-# * [x] Fix after pressing 'a' the list of Archived ones is wrong
-# * [x] Run npClean after a review -- and then get this to run after each individual note edit
+# * [x] Run npClean after each individual note edit
 # * [x] Separate parts to a different 'npClean' script daily crawl to fix various things
 #----------------------------------------------------------------------------------
 
@@ -51,7 +44,7 @@ require 'time'
 require 'open-uri'
 require 'etc' # for login lookup
 require 'fuzzy_match' # gem install fuzzy_match
-require 'colorize' # for coloured output using https://github.com/fazibear/colorize
+require 'colorize' # gem install colorize (for coloured output using https://github.com/fazibear/colorize)
 
 # Constants
 DateFormat = '%d.%m.%y'
@@ -62,17 +55,17 @@ EarlyDate = Date.new(1970, 1, 1)
 summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
-Username = 'jonathan' # set manually, as automated methods don't seek to work.
-StorageType = 'iCloud' # or Dropbox
-TagsToFind = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
-NPCleanScriptPath = '/Users/jonathan/bin/npClean'
-NPStatsScriptPath = '/Users/jonathan/bin/npStats'
-NoteplanDir = if StorageType == 'iCloud'
-                "/Users/#{Username}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
+USERNAME = 'jonathan' # set manually, as automated methods don't seek to work.
+STORAGE_TYPE = 'iCloud' # or Dropbox
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
+CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'
+STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'
+NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
               else
-                "/Users/#{Username}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
+                "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               end
-User = Etc.getlogin # for debugging when running by launchctl
+USER = Etc.getlogin # for debugging when running by launchctl
 
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -455,22 +448,25 @@ until quit
     notesAllOrdered.clear
 
     # Read metadata for all note files in the NotePlan directory
-    # (and sub-directories from v2.5)
+    # (and sub-directories from v2.5, other than ones starting '@')
     begin
-      Dir.chdir(NoteplanDir + '/Notes/')
+      Dir.chdir(NP_BASE_DIR + '/Notes/')
       Dir.glob('**/*.txt').each do |this_file|
-        notes[i] = NPNote.new(this_file, i)
-        nrd = notes[i].nextReviewDate
-        if notes[i].isActive && !notes[i].isCancelled
-          if nrd && (nrd <= TodaysDate)
-            notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
+        puts this_file
+        if this_file =~ '/@' # only continue if this isn't in a sub-directory starting with '@'
+          notes[i] = NPNote.new(this_file, i)
+          nrd = notes[i].nextReviewDate
+          if notes[i].isActive && !notes[i].isCancelled
+            if nrd && (nrd <= TodaysDate)
+              notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
+            else
+              notesOtherActive.push(notes[i].id) # Save list of other active notes
+            end
           else
-            notesOtherActive.push(notes[i].id) # Save list of other active notes
+            notesArchived.push(notes[i].id) # Save list of in-active notes
           end
-        else
-          notesArchived.push(notes[i].id) # Save list of in-active notes
+          i += 1
         end
-        i += 1
       end
     rescue StandardError => e
       puts "ERROR: Hit #{e.exception.message} when reading note file #{this_file}".colorize(WarningColour)
@@ -528,7 +524,7 @@ until quit
   when 'c'
     # go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
     begin
-      success = system('ruby', NPCleanScriptPath)
+      success = system('ruby', CLEAN_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npClean script'.colorize(WarningColour)
     end
@@ -536,7 +532,7 @@ until quit
   when 't'
     # go and run the statistics script, npStats
     begin
-      success = system('ruby', NPStatsScriptPath)
+      success = system('ruby', STATS_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npStats script'.colorize(WarningColour)
     end
@@ -555,7 +551,7 @@ until quit
   when 'l'
     # Show @people annotations for those listed in atTags
     puts "\n----------------------------- People Mentioned ----------------------------------------------"
-    TagsToFind.each do |p|
+    MENTIONS_TO_FIND.each do |p|
       puts
       puts "#{p} mentions:".bold
 
@@ -590,7 +586,7 @@ until quit
       notesOtherActiveOrdered.push(noteID)
       # Clean up this file
       begin
-        success = system('ruby', NPCleanScriptPath, notes[noteID].filename)
+        success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
         puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
@@ -611,7 +607,7 @@ until quit
         notesOtherActiveOrdered.push(noteIDToReview)
         # Clean up this file
         begin
-          success = system('ruby', NPCleanScriptPath, notes[noteIDToReview].filename)
+          success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDToReview].filename)
         rescue StandardError
           puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDToReview].title.to_s.colorize(WarningColour).bold
         end
@@ -623,7 +619,7 @@ until quit
   when 's'
     # write out the unordered summary to summaryFilename, temporarily redirecting stdout
     # using 'w' mode which will truncate any existing file
-    Dir.chdir(NoteplanDir + '/Summaries/')
+    Dir.chdir(NP_BASE_DIR + '/Summaries/')
     sf = File.open(summaryFilename, 'w')
     old_stdout = $stdout
     $stdout = sf
