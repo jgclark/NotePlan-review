@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.3, 18.4.2020
+# (c) Jonathan Clark, v1.2.4, 18.4.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -478,20 +478,7 @@ until quit
       notes[n].print_summary
     end
     puts '------------------------------------------------------------------------------------------------'
-    no = 0
-    nw = 0
-    nd = 0
-    notesToReview.each do |n|
-      nd += notes[n].done
-      nw += notes[n].waiting
-      no += notes[n].open
-    end
-    notesOtherActive.each do |n|
-      nd += notes[n].done
-      nw += notes[n].waiting
-      no += notes[n].open
-    end
-    puts "     #{notesToReview.count + notesOtherActive.count} active notes with #{no} open, #{nw} waiting, #{nd} done tasks.   #{notesArchived.count} archived notes"
+    puts "     #{notesToReview.count + notesOtherActive.count} active, #{notesArchived.count} archived notes"
 
   when 'v'
     # Show all notes to review
@@ -608,17 +595,8 @@ until quit
     puts "# NotePlan Notes summary, #{timeNow}"
     notesAllOrdered.each(&:print_summary_to_file)
 
-    no = 0
-    nw = 0
-    nd = 0
-    notesOtherActive.each do |n| # WHY doesn't notesAllOrdered work here?
-      nd += notes[n].done
-      nw += notes[n].waiting
-      no += notes[n].open
-    end
-    puts '# Totals'
-    puts "Notes: #{notesToReview.count + notesOtherActive.count} active, #{notesArchived.count} archived"
-    puts "Tasks: #{no} open, #{nw} waiting, #{nd} done"
+    puts
+    puts "= #{notesToReview.count + notesOtherActive.count} active, #{notesArchived.count} archived notes."
 
     $stdout = old_stdout
     sf.close
