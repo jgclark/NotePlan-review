@@ -434,13 +434,13 @@ until quit
         next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
         notes[i] = NPNote.new(this_file, i)
-        nrd = notes[i].nextReviewDate
         next unless notes[i].isActive && !notes[i].isCancelled
 
+        nrd = notes[i].nextReviewDate
         if nrd && (nrd <= TodaysDate)
           notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
         else
-          notesArchived.push(notes[i].id) # Save list of in-active notes
+          notesOtherActive.push(notes[i].id) # Save list of in-active notes
         end
         i += 1
       end
@@ -459,9 +459,11 @@ until quit
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
     puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
-    puts '-------------------------------- Not Active ----------------------------------------------------'
-    notesArchived.each do |n|
-      notes[n].print_summary
+    if notesArchived.count.positive?
+      puts '-------------------------------- Not Active ----------------------------------------------------'
+      notesArchived.each do |n|
+        notes[n].print_summary
+      end
     end
     puts '------------------------------- Other Active ---------------------------------------------------'
     notesOtherActiveOrdered.each do |n|
