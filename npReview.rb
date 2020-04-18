@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.1, 19.3.2020
+# (c) Jonathan Clark, v1.2.2, 18.4.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -19,26 +19,7 @@
 #
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
-# TODO:
-# * [ ] try changing @start(date), @due(date) etc. to @start/date etc.
-#----------------------------------------------------------------------------------
-# DONE:
-# * [x] Issue 1: add ability to find and review notes in folders (from NP v2.5)
-# * [x] add extra space before @reviewed when adding for first time
-# * [x] make summary outputs to distinguish archived from complete notes
-# * [x] order 'other active' by title
-# * [x] fail gracefully when no npClean script available
-# * [x] in file read operations in initialize, cope with EOF errors [useful info at https://www.studytonight.com/ruby/exception-handling-in-ruby]
-# * [x] for summary strip out the colorizing and output CSV instead
-# * [x] extend 'r' action to review particular notes, not just the next in the list
-# * [x] Make cancelled part of active not active (e.g. Home Battery)
-# * [x] put total of tasks to review as summary on 'v'
-# * [x] add colourisation of important output
-# * [x] in 'e' cope with no fuzzy match error
-# * [x] Log stats to summary file
-# * [x] Report some stats from all open things
-# * [x] Run npClean after each individual note edit
-# * [x] Separate parts to a different 'npClean' script daily crawl to fix various things
+# For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
 
 require 'date'
@@ -304,7 +285,7 @@ class NPNote
         n += 1
       end
       f.close
-      lineCount = n
+      line_count = n
     rescue StandardError => e
       puts "ERROR: Hit #{e.exception.message} when updating last review date for file #{@filename}".colorize(WarningColour)
     end
@@ -317,7 +298,7 @@ class NPNote
 
     # in the rest of the lines, do some clean up:
     n = 2
-    while n < lineCount
+    while n < line_count
       # remove any #waiting tags on complete tasks
       lines[n].gsub!(/ #waiting/, '') if (lines[n] =~ /#waiting/) && (lines[n] =~ /\[x\]/)
       # blank any lines which just have a * or -
@@ -384,10 +365,6 @@ class NPNote
       puts '    ' + line
     end
   end
-
-  # def inspect
-  #   puts "#{@id}: nrd = #{@nextReviewDate}"
-  # end
 end
 
 #=======================================================================================
@@ -399,7 +376,7 @@ end
 quit = false
 verb = 'a' # get going by reading and summarising all notes
 input = ''
-searchString = bestMatch = nil
+searchString = best_match = nil
 titleList = []
 notesToReview = [] # list of ID of notes overdue for review
 notesToReviewOrdered = []
@@ -419,9 +396,9 @@ until quit
       i += 1
     end
     fm = FuzzyMatch.new(titleList)
-    bestMatch = fm.find(searchString)
+    best_match = fm.find(searchString)
   else
-    bestMatch = nil
+    best_match = nil
   end
 
   # Decide what Command to run ...
@@ -539,9 +516,9 @@ until quit
   when 'e'
     # edit the note
     # use title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring')
-    if bestMatch
-      puts "   Opening closest match note '#{bestMatch}'"
-      noteID = titleList.find_index(bestMatch)
+    if best_match
+      puts "   Opening closest match note '#{best_match}'"
+      noteID = titleList.find_index(best_match)
       notes[noteID].open_note
     else
       puts "   Warning: Couldn't find a note matching '#{searchString}'".colorize(WarningColour)
@@ -569,11 +546,11 @@ until quit
 
   when 'r'
     # If no extra characters given, then open the next note that needs reviewing
-    if bestMatch
-      noteID = titleList.find_index(bestMatch)
+    if best_match
+      noteID = titleList.find_index(best_match)
       notes[noteID].open_note
-      # puts "       Reviewing closest match note '#{bestMatch}' ... press any key when finished."
-      print '  Reviewing closest match note ' + bestMatch.to_s. bold + ' ... press any key when finished. '
+      # puts "       Reviewing closest match note '#{best_match}' ... press any key when finished."
+      print '  Reviewing closest match note ' + best_match.to_s. bold + ' ... press any key when finished. '
       gets
 
       # update the @reviewed() date for the note just reviewed
