@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.2, 18.4.2020
+# (c) Jonathan Clark, v1.2.3, 18.4.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -30,8 +30,9 @@ require 'fuzzy_match' # gem install fuzzy_match
 require 'colorize' # gem install colorize (for coloured output using https://github.com/fazibear/colorize)
 
 # Constants
-DateFormat = '%d.%m.%y'.freeze
-DateTimeFormat = '%e %b %Y %H:%M'.freeze
+DATE_FORMAT = '%d.%m.%y'.freeze
+SORTING_DATE_FORMAT = '%y%m%d'.freeze
+DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
 timeNow = Time.now
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 EarlyDate = Date.new(1970, 1, 1)
@@ -224,9 +225,9 @@ class NPNote
     end
     colour = ReviewNeededColour if @toReview
     titleTrunc = @title[0..37]
-    endDateFormatted = @dueDate ? @dueDate.strftime(DateFormat) : ''
-    completeDateFormatted = @completeDate ? @completeDate.strftime(DateFormat) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DateFormat) : ''
+    endDateFormatted = @dueDate ? @dueDate.strftime(DATE_FORMAT) : ''
+    completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
+    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
     out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
     if @isProject || @isGoal # make P/G italic
       puts out.colorize(colour).italic
@@ -240,9 +241,9 @@ class NPNote
     mark = '[x]'
     mark = '[ ]' if @isActive
     mark = '[-]' if @isCancelled
-    endDateFormatted = @dueDate ? @dueDate.strftime(DateFormat) : ''
-    completeDateFormatted = @completeDate ? @completeDate.strftime(DateFormat) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DateFormat) : ''
+    endDateFormatted = @dueDate ? @dueDate.strftime(DATE_FORMAT) : ''
+    completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
+    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
     out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
     puts out
   end
@@ -437,6 +438,7 @@ until quit
         next unless notes[i].isActive && !notes[i].isCancelled
 
         nrd = notes[i].nextReviewDate
+        # puts "#{i}: #{notes[i].title} #{notes[i].dueDate}, #{notes[i].nextReviewDate}"
         if nrd && (nrd <= TodaysDate)
           notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
         else
@@ -451,10 +453,12 @@ until quit
     # Order notes by different fields
     # Info: https://stackoverflow.com/questions/882070/sorting-an-array-of-objects-in-ruby-by-object-attribute
     # https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
-    # Can do multiples using [s.dueDate, s....]
+    # https://stackoverflow.com/questions/827649/what-is-the-ruby-spaceship-operator
+    notesAllOrdered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
+    # Following are more complicated, as the array is of _id_s, not actual NPNote objects
+    # NB: nil entries will break any comparison.
     notesToReviewOrdered = notesToReview.sort_by { |s| notes[s].nextReviewDate }
-    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].title } # to get around problem of nil entries breaking any comparison
-    notesAllOrdered = notes.sort_by(&:title) # simpler, as defaults to alphanum sort
+    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest

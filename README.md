@@ -10,7 +10,7 @@ To add the project functionality in a note file use this structure:
   - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
   - a @reviewInterval() field, using terms like '2m', '1w'
 
-From NP v2.6? this reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders.
+From NP v2.5? this reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders.
 
 ## Possible actions
 It shows a summary of the **projects ready for review**, grouped by active and then not active (archived or on-hold) projects. It then waits for user typed input to select one of the following options:
@@ -37,5 +37,5 @@ Set the following Constants at the top of the file:
 - <code>CLEAN_SCRIPT_PATH</code>: full path and filename of optional <code>npClean</code> script which can be run
 - the various constants under the **Colours** section, using the palette given in the 'colorize' gem
 
-## TODO
-* [ ] order 'other active' by due date [done] then title
+## Problems? Suggestions?
+If you have any reports of problems, or suggestions for improvement, please [open an issue in the GitHub project](https://github.com/jgclark/NotePlan-review/issues).
