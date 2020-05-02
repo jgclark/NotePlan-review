@@ -8,7 +8,7 @@ To add the project functionality in a note file use this structure:
 - the second line contains metadata items:
   - any #hashtags, particularly #active, #archive, #goal and/or #project
   - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
-  - a @reviewInterval() field, using terms like '2m', '1w'
+  - a @review() field, using terms like '2m', '1w'
 
 From NP v2.5? this reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders.
 
@@ -16,15 +16,15 @@ From NP v2.5? this reads notes in sub-folders too (excluding those beginning wit
 It shows a summary of the **projects ready for review**, grouped by active and then not active (archived or on-hold) projects. It then waits for user typed input to select one of the following options:
 
 - **a**: list all notes -- this also re-reads all notes from storage
-- **c**: run clean up script (if present)
-- **e**: open a note in NotePlan, using fuzzy match to the remaining characters typed after the 'e'
+- **c**: run clean up script (if present: see [NotePlan-cleaner project]https://github.com/jgclark/NotePlan-cleaner))
+- **e**: open a note in NotePlan app, using fuzzy match to the remaining characters typed after the 'e'
 - **l**: list people @mentions in open todos
 - **p**: list all projects
-- **r**: review next item in the ready to review list -- i.e. open in NotePlan. When you have finished editing, return to the command line and press any key. This then automatically updates the @reviewed(...) date
-- **s**: save summary to a file with today's date in the summaries/ subdirectory
+- **r**: review next note in the ready to review list in NotePlan. When you have finished editing, return to the command line and press any key. This then automatically updates the @reviewed(...) date in the note
+- **s**: save summary to a file with today's date in the summaries/ subdirectory (it creates it on the first run of this summary)
 - **t**: show summary of stats for tasks
 - **v**: view those to review
-- **q**: quit the script 
+- **q**: quit the script
 - **w**: list all #waiting tasks
 
 ## Configuration
