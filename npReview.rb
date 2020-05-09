@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.4, 18.4.2020
+# (c) Jonathan Clark, v1.2.5, 9.5.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -15,7 +15,8 @@
 # From NotePlan v2.5 it also covers notes in sub-directories, but ignores notes
 # in the special @Archive and @Trash sub-directories (or others beginning @).
 #
-# Can also show a list of projects.
+# Can also show a list of projects, and run related npStats and npClean scripts
+# from its related GitHub projects.
 #
 # Requires gems fuzzy_match  (> gem install fuzzy_match)
 #----------------------------------------------------------------------------------
@@ -83,13 +84,13 @@ class NPNote
   attr_reader :title
   attr_reader :nextReviewDate
   attr_reader :reviewInterval
-  attr_reader :isActive
-  attr_reader :isCancelled
-  attr_reader :isProject
-  attr_reader :isGoal
-  attr_reader :toReview
-  attr_reader :metadataLine
-  attr_reader :dueDate
+  attr_reader :is_active
+  attr_reader :is_cancelled
+  attr_reader :is_project
+  attr_reader :is_goal
+  attr_reader :to_review
+  attr_reader :metadata_line
+  attr_reader :due_date
   attr_reader :open
   attr_reader :waiting
   attr_reader :done
@@ -100,8 +101,8 @@ class NPNote
     @filename = this_file
     @id = id
     @title = nil
-    @isActive = true # assume note is active
-    @isCancelled = false
+    @is_active = true # assume note is active
+    @is_cancelled = false
     @startDate = nil
     @completeDate = nil
     @reviewInterval = nil
@@ -109,21 +110,21 @@ class NPNote
     @nextReviewDateRelative = nil
     @codes = nil
     @open = @waiting = @done = 0
-    @dueDate = nil
+    @due_date = nil
     @nextReviewDate = nil
-    @isProject = false
-    @isGoal = false
-    @toReview = false
+    @is_project = false
+    @is_goal = false
+    @to_review = false
 
     # initialise other variables (that don't need to persist with the class instance)
-    headerLine = @metadataLine = nil
+    headerLine = @metadata_line = nil
 
     # puts "  Initializing NPNote for #{this_file}"
     # Open file and read the first two lines, using a rescue block to catch file errors
     File.open(this_file) do |f|
       begin
         headerLine = f.readline
-        @metadataLine = f.readline
+        @metadata_line = f.readline
 
         # Now make a title for this file from first line
         # (but take off any heading characters at the start and starting and ending whitespace)
@@ -132,24 +133,24 @@ class NPNote
 
         # Now process line 2 (rest of metadata)
         # the following regex matches returns an array with one item, so make a string (by join), and then parse as a date
-        @metadataLine.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @startDate = Date.parse(m.join) }
-        @metadataLine.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @dueDate = Date.parse(m.join) } # allow alternate form '@end(...)'
-        @metadataLine.scan(%r{(@complete|@completed|@finish)\(([0-9\-\./]{6,10})\)}) { |m| @completeDate = Date.parse(m.join) }
-        @metadataLine.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
-        @metadataLine.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @reviewInterval = m.join.downcase }
+        @metadata_line.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @startDate = Date.parse(m.join) }
+        @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
+        @metadata_line.scan(%r{(@complete|@completed|@finish)\(([0-9\-\./]{6,10})\)}) { |m| @completeDate = Date.parse(m.join) }
+        @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
+        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @reviewInterval = m.join.downcase }
 
         # make active if #active flag set
-        @isActive = true    if @metadataLine =~ /#active/
+        @is_active = true    if @metadata_line =~ /#active/
         # but override if #archive set, or complete date set
-        @isActive = false   if (@metadataLine =~ /#archive/) || @completeDate
+        @is_active = false   if (@metadata_line =~ /#archive/) || @completeDate
         # make cancelled if #cancelled or #someday flag set
-        @isCancelled = true if (@metadataLine =~ /#cancelled/) || (@metadataLine =~ /#someday/)
-        # make toReview if review date set and before today
-        @toReview = true if @nextReviewDate && (nrd <= TodaysDate)
+        @is_cancelled = true if (@metadata_line =~ /#cancelled/) || (@metadata_line =~ /#someday/)
+        # make to_review if review date set and before today
+        @to_review = true if @nextReviewDate && (nrd <= TodaysDate)
 
         # If an active task and review interval is set, calc next review date.
         # If no last review date set, assume we need to review today.
-        if @reviewInterval && @isActive
+        if @reviewInterval && @is_active
           @nextReviewDate = if @lastReviewDate
                               calc_next_review(@lastReviewDate, @reviewInterval)
                             else
@@ -158,15 +159,15 @@ class NPNote
         end
 
         # Note if this is a #project or #goal
-        @isProject = true if @metadataLine =~ /#project/
-        @isGoal    = true if @metadataLine =~ /#goal/
+        @is_project = true if @metadata_line =~ /#project/
+        @is_goal    = true if @metadata_line =~ /#goal/
         # look for project etc codes (there might be several, so join with spaces), and make uppercase
         # @@@ something wrong with regex but I can't see what, so removing the logic
-        # @metadataLine.scan(/[PpFfSsWwBb][0-9]+/)  { |m| @codes = m.join(' ').downcase }
+        # @metadata_line.scan(/[PpFfSsWwBb][0-9]+/)  { |m| @codes = m.join(' ').downcase }
         # If no codes given, but this is a goal or project, then use a basic code
         if @codes.nil?
-          @codes = 'P' if @isProject
-          @codes = 'G' if @isGoal
+          @codes = 'P' if @is_project
+          @codes = 'G' if @is_goal
         end
 
         # Now read through rest of file, counting number of open, waiting, done tasks
@@ -215,21 +216,21 @@ class NPNote
     # Pretty print a summary for this NP note to screen
     mark = '[x] '
     colour = CompletedColour
-    if @isActive
+    if @is_active
       mark = '[ ] '
       colour = ActiveColour
     end
-    if @isCancelled
+    if @is_cancelled
       mark = '[-] '
       colour = CancelledColour
     end
-    colour = ReviewNeededColour if @toReview
+    colour = ReviewNeededColour if @to_review
     titleTrunc = @title[0..37]
-    endDateFormatted = @dueDate ? @dueDate.strftime(DATE_FORMAT) : ''
+    endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
     nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
     out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
-    if @isProject || @isGoal # make P/G italic
+    if @is_project || @is_goal # make P/G italic
       puts out.colorize(colour).italic
     else
       puts out.colorize(colour)
@@ -239,9 +240,9 @@ class NPNote
   def print_summary_to_file
     # print summary of this note in one line as a CSV file line
     mark = '[x]'
-    mark = '[ ]' if @isActive
-    mark = '[-]' if @isCancelled
-    endDateFormatted = @dueDate ? @dueDate.strftime(DATE_FORMAT) : ''
+    mark = '[ ]' if @is_active
+    mark = '[-]' if @is_cancelled
+    endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
     nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
     out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
@@ -379,8 +380,8 @@ verb = 'a' # get going by reading and summarising all notes
 input = ''
 searchString = best_match = nil
 titleList = []
-notesToReview = [] # list of ID of notes overdue for review
-notesToReviewOrdered = []
+notesto_review = [] # list of ID of notes overdue for review
+notesto_reviewOrdered = []
 notesOtherActive = [] # list of ID of other active notes
 notesOtherActiveOrdered = []
 notesArchived = []      # list of ID of archived notes
@@ -409,19 +410,19 @@ until quit
     puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
     puts '--------------------------------------- Projects List ------------------------------------------'
     notes.each do |n|
-      n.print_summary  if n.isProject
+      n.print_summary  if n.is_project
     end
     puts "\n---------------------------------------- Goals List --------------------------------------------"
     notes.each do |n|
-      n.print_summary  if n.isGoal
+      n.print_summary  if n.is_goal
     end
 
   when 'a'
     # (Re)parse the data files
     i = 0
     notes.clear # clear if not already empty
-    notesToReview.clear
-    notesToReviewOrdered.clear
+    notesto_review.clear
+    notesto_reviewOrdered.clear
     notesOtherActive.clear
     notesOtherActiveOrdered.clear
     notesArchived.clear
@@ -435,12 +436,12 @@ until quit
         next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
         notes[i] = NPNote.new(this_file, i)
-        next unless notes[i].isActive && !notes[i].isCancelled
+        next unless notes[i].is_active && !notes[i].is_cancelled
 
         nrd = notes[i].nextReviewDate
-        # puts "#{i}: #{notes[i].title} #{notes[i].dueDate}, #{notes[i].nextReviewDate}"
+        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].nextReviewDate}"
         if nrd && (nrd <= TodaysDate)
-          notesToReview.push(notes[i].id) # Save list of ID of notes overdue for review
+          notesto_review.push(notes[i].id) # Save list of ID of notes overdue for review
         else
           notesOtherActive.push(notes[i].id) # Save list of in-active notes
         end
@@ -457,7 +458,7 @@ until quit
     notesAllOrdered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
-    notesToReviewOrdered = notesToReview.sort_by { |s| notes[s].nextReviewDate }
+    notesto_reviewOrdered = notesto_review.sort_by { |s| notes[s].nextReviewDate }
     notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
@@ -474,28 +475,28 @@ until quit
       notes[n].print_summary
     end
     puts '------------------------------ Ready to review -------------------------------------------------'
-    notesToReviewOrdered.each do |n|
+    notesto_reviewOrdered.each do |n|
       notes[n].print_summary
     end
     puts '------------------------------------------------------------------------------------------------'
-    puts "     #{notesToReview.count + notesOtherActive.count} active, #{notesArchived.count} archived notes"
+    puts "     #{notesto_review.count + notesOtherActive.count} active, #{notesArchived.count} archived notes"
 
   when 'v'
     # Show all notes to review
     puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
     puts '------------------------------ Ready to review -------------------------------------------------'
-    notesToReviewOrdered.each do |n|
+    notesto_reviewOrdered.each do |n|
       notes[n].print_summary
     end
     # show summary count
-    puts "     (Total: #{notesToReview.count} notes)".colorize(ActiveColour)
+    puts "     (Total: #{notesto_review.count} notes)".colorize(ActiveColour)
 
   when 'c'
     # go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
     begin
       success = system('ruby', CLEAN_SCRIPT_PATH)
     rescue StandardError
-      puts '  Error trying to run npClean script'.colorize(WarningColour)
+      puts '  Error trying to run npClean script -- please check it has been configured in CLEAN_SCRIPT_PATH'.colorize(WarningColour)
     end
 
   when 't'
@@ -503,7 +504,7 @@ until quit
     begin
       success = system('ruby', STATS_SCRIPT_PATH)
     rescue StandardError
-      puts '  Error trying to run npStats script'.colorize(WarningColour)
+      puts '  Error trying to run npStats script -- please check it has been configured in STATS_SCRIPT_PATH'.colorize(WarningColour)
     end
 
   when 'e'
@@ -524,7 +525,7 @@ until quit
       puts
       puts "#{p} mentions:".bold
 
-      notesToReviewOrdered.each do |n|
+      notesto_reviewOrdered.each do |n|
         notes[n].list_person_mentioned(p)
       end
       notesOtherActiveOrdered.each do |n|
@@ -549,8 +550,8 @@ until quit
       # update the @reviewed() date for the note just reviewed
       notes[noteID].update_last_review_date
       # Attempt to remove this from notesToReivewOrdered
-      notesToReview.delete(noteID)
-      notesToReviewOrdered.delete(noteID)
+      notesto_review.delete(noteID)
+      notesto_reviewOrdered.delete(noteID)
       notesOtherActive.push(noteID)
       notesOtherActiveOrdered.push(noteID)
       # Clean up this file
@@ -560,25 +561,25 @@ until quit
         puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
     else
-      if !notesToReviewOrdered.empty?
-        noteIDToReview = notesToReviewOrdered.first
-        notes[noteIDToReview].open_note
-        # puts "       Press any key when finished reviewing '#{notes[noteIDToReview].title}' ..."
-        print '  Reviewing ' + notes[noteIDToReview].title.to_s.bold + ' ... press any key when finished. '
+      if !notesto_reviewOrdered.empty?
+        noteIDto_review = notesto_reviewOrdered.first
+        notes[noteIDto_review].open_note
+        # puts "       Press any key when finished reviewing '#{notes[noteIDto_review].title}' ..."
+        print '  Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ... press any key when finished. '
         gets
 
         # update the @reviewed() date for the note just reviewed
-        notes[noteIDToReview].update_last_review_date
-        # move this from notesToReview to notesOtherActive
-        notesToReview.delete(noteIDToReview)
-        notesToReviewOrdered.delete(noteIDToReview)
-        notesOtherActive.push(noteIDToReview)
-        notesOtherActiveOrdered.push(noteIDToReview)
+        notes[noteIDto_review].update_last_review_date
+        # move this from notesto_review to notesOtherActive
+        notesto_review.delete(noteIDto_review)
+        notesto_reviewOrdered.delete(noteIDto_review)
+        notesOtherActive.push(noteIDto_review)
+        notesOtherActiveOrdered.push(noteIDto_review)
         # Clean up this file
         begin
-          success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDToReview].filename)
+          success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDto_review].filename)
         rescue StandardError
-          puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDToReview].title.to_s.colorize(WarningColour).bold
+          puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
         end
       else
         puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
@@ -596,7 +597,7 @@ until quit
     notesAllOrdered.each(&:print_summary_to_file)
 
     puts
-    puts "= #{notesToReview.count + notesOtherActive.count} active, #{notesArchived.count} archived notes."
+    puts "= #{notesto_review.count + notesOtherActive.count} active, #{notesArchived.count} archived notes."
 
     $stdout = old_stdout
     sf.close
@@ -605,7 +606,7 @@ until quit
   when 'w'
     # list @waiting items in open notes
     puts "\n-------------------------------------- #Waiting Tasks -----------------------------------------"
-    notesToReviewOrdered.each do |n|
+    notesto_reviewOrdered.each do |n|
       notes[n].list_waiting_tasks
     end
     notesOtherActiveOrdered.each do |n|
