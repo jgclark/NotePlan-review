@@ -1,14 +1,14 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.5, 9.5.2020
+# (c) Jonathan Clark, v1.2.6, 17.6.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
 # - any #hashtags, particularly #Pnn and #active
 # - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
 #   but other forms can be parsed as well
-# - a @reviewInterval() field, using terms like '2m', '1w'
+# - a @review_interval() field, using terms like '2m', '1w'
 #
 # Shows a summary of the notes, grouped by active and then closed.
 # The active ones also have a list of the number of open / waiting / closed tasks.
@@ -82,8 +82,8 @@ class NPNote
   # Define the attributes that need to be visible outside the class instances
   attr_reader :id
   attr_reader :title
-  attr_reader :nextReviewDate
-  attr_reader :reviewInterval
+  attr_reader :next_review_date
+  attr_reader :review_interval
   attr_reader :is_active
   attr_reader :is_cancelled
   attr_reader :is_project
@@ -105,13 +105,13 @@ class NPNote
     @is_cancelled = false
     @startDate = nil
     @completeDate = nil
-    @reviewInterval = nil
+    @review_interval = nil
     @lastReviewDate = nil
-    @nextReviewDateRelative = nil
+    @next_review_date_relative = nil
     @codes = nil
     @open = @waiting = @done = 0
     @due_date = nil
-    @nextReviewDate = nil
+    @next_review_date = nil
     @is_project = false
     @is_goal = false
     @to_review = false
@@ -137,7 +137,7 @@ class NPNote
         @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
         @metadata_line.scan(%r{(@complete|@completed|@finish)\(([0-9\-\./]{6,10})\)}) { |m| @completeDate = Date.parse(m.join) }
         @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
-        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @reviewInterval = m.join.downcase }
+        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
 
         # make active if #active flag set
         @is_active = true    if @metadata_line =~ /#active/
@@ -146,13 +146,13 @@ class NPNote
         # make cancelled if #cancelled or #someday flag set
         @is_cancelled = true if (@metadata_line =~ /#cancelled/) || (@metadata_line =~ /#someday/)
         # make to_review if review date set and before today
-        @to_review = true if @nextReviewDate && (nrd <= TodaysDate)
+        @to_review = true if @next_review_date && (nrd <= TodaysDate)
 
         # If an active task and review interval is set, calc next review date.
         # If no last review date set, assume we need to review today.
-        if @reviewInterval && @is_active
-          @nextReviewDate = if @lastReviewDate
-                              calc_next_review(@lastReviewDate, @reviewInterval)
+        if @review_interval && @is_active
+          @next_review_date = if @lastReviewDate
+                              calc_next_review(@lastReviewDate, @review_interval)
                             else
                               TodaysDate
                             end
@@ -228,8 +228,8 @@ class NPNote
     titleTrunc = @title[0..37]
     endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
-    out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
+    next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
+    out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
     if @is_project || @is_goal # make P/G italic
       puts out.colorize(colour).italic
     else
@@ -244,8 +244,8 @@ class NPNote
     mark = '[-]' if @is_cancelled
     endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
-    out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
+    next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
+    out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
     puts out
   end
 
@@ -432,14 +432,12 @@ until quit
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
       Dir.chdir(NP_BASE_DIR + '/Notes/')
-      Dir.glob('**/*.txt').each do |this_file|
-        next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
-
+      Dir.glob("{[!@]**/*,*}.txt").each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
 
-        nrd = notes[i].nextReviewDate
-        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].nextReviewDate}"
+        nrd = notes[i].next_review_date
+        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].next_review_date}"
         if nrd && (nrd <= TodaysDate)
           notesto_review.push(notes[i].id) # Save list of ID of notes overdue for review
         else
@@ -458,8 +456,8 @@ until quit
     notesAllOrdered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
-    notesto_reviewOrdered = notesto_review.sort_by { |s| notes[s].nextReviewDate }
-    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
+    notesto_reviewOrdered = notesto_review.sort_by { |s| notes[s].next_review_date }
+    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
