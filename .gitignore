@@ -56,3 +56,6 @@ build-iPhoneSimulator/
 # .rubocop-https?--*
 *.yml
 .DS_Store
+
+# JGC
+glob-test.rb
