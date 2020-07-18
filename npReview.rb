@@ -41,10 +41,10 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
-STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
 MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church'].freeze
 CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'.freeze
 STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
+STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
 NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               elsif STORAGE_TYPE == 'CloudKit'
@@ -52,6 +52,9 @@ NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
               else
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
               end
+NP_NOTE_DIR = "#{NP_BASE_DIR}/Notes".freeze
+NP_SUMMARIES_DIR = "#{NP_BASE_DIR}/Summaries".freeze
+
 USER = Etc.getlogin # for debugging when running by launchctl
 
 # Colours, using the colorization gem
@@ -434,7 +437,7 @@ until quit
     # Read metadata for all note files in the NotePlan directory
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
-      Dir.chdir(NP_BASE_DIR + '/Notes/')
+      Dir.chdir(NP_NOTE_DIR)
       Dir.glob("{[!@]**/*,*}.txt").each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
@@ -588,7 +591,7 @@ until quit
   when 's'
     # write out the unordered summary to summaryFilename, temporarily redirecting stdout
     # using 'w' mode which will truncate any existing file
-    Dir.chdir(NP_BASE_DIR + '/Summaries/')
+    Dir.chdir(NP_SUMMARIES_DIR) # TODO: should check directory exists first
     sf = File.open(summaryFilename, 'w')
     old_stdout = $stdout
     $stdout = sf
