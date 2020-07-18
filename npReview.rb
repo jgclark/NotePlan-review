@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.5, 9.5.2020
+# (c) Jonathan Clark, v1.2.6, 17.6.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -433,9 +433,7 @@ until quit
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
       Dir.chdir(NP_BASE_DIR + '/Notes/')
-      Dir.glob('**/*.txt').each do |this_file|
-        next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
-
+      Dir.glob("{[!@]**/*,*}.txt").each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
 
