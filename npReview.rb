@@ -8,7 +8,7 @@
 # - any #hashtags, particularly #Pnn and #active
 # - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
 #   but other forms can be parsed as well
-# - a @reviewInterval() field, using terms like '2m', '1w'
+# - a @review_interval() field, using terms like '2m', '1w'
 #
 # Shows a summary of the notes, grouped by active and then closed.
 # The active ones also have a list of the number of open / waiting / closed tasks.
@@ -42,7 +42,7 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
 STORAGE_TYPE = 'iCloud'.freeze # or Dropbox
-MENTIONS_TO_FIND = ['@admin', '@facilities', '@CWs', '@cfl', '@yfl', '@secretary', '@JP', '@martha', '@church'].freeze
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church'].freeze
 CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'.freeze
 STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
 NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
@@ -75,15 +75,15 @@ notes = [] # to hold all our note objects
 # - print_summary and print_summary_to_file
 # - open_note
 # - update_last_review_date
-# - list_person_mentioned
+# - list_tag_mentions
 # - list_waiting_tasks
 #-------------------------------------------------------------------------
 class NPNote
   # Define the attributes that need to be visible outside the class instances
   attr_reader :id
   attr_reader :title
-  attr_reader :nextReviewDate
-  attr_reader :reviewInterval
+  attr_reader :next_review_date
+  attr_reader :review_interval
   attr_reader :is_active
   attr_reader :is_cancelled
   attr_reader :is_project
@@ -105,13 +105,13 @@ class NPNote
     @is_cancelled = false
     @startDate = nil
     @completeDate = nil
-    @reviewInterval = nil
+    @review_interval = nil
     @lastReviewDate = nil
-    @nextReviewDateRelative = nil
+    @next_review_date_relative = nil
     @codes = nil
     @open = @waiting = @done = 0
     @due_date = nil
-    @nextReviewDate = nil
+    @next_review_date = nil
     @is_project = false
     @is_goal = false
     @to_review = false
@@ -137,7 +137,7 @@ class NPNote
         @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
         @metadata_line.scan(%r{(@complete|@completed|@finish)\(([0-9\-\./]{6,10})\)}) { |m| @completeDate = Date.parse(m.join) }
         @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
-        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @reviewInterval = m.join.downcase }
+        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
 
         # make active if #active flag set
         @is_active = true    if @metadata_line =~ /#active/
@@ -146,16 +146,16 @@ class NPNote
         # make cancelled if #cancelled or #someday flag set
         @is_cancelled = true if (@metadata_line =~ /#cancelled/) || (@metadata_line =~ /#someday/)
         # make to_review if review date set and before today
-        @to_review = true if @nextReviewDate && (nrd <= TodaysDate)
+        @to_review = true if @next_review_date && (nrd <= TodaysDate)
 
         # If an active task and review interval is set, calc next review date.
         # If no last review date set, assume we need to review today.
-        if @reviewInterval && @is_active
-          @nextReviewDate = if @lastReviewDate
-                              calc_next_review(@lastReviewDate, @reviewInterval)
-                            else
-                              TodaysDate
-                            end
+        if @review_interval && @is_active
+          @next_review_date = if @lastReviewDate
+                                calc_next_review(@lastReviewDate, @review_interval)
+                              else
+                                TodaysDate
+                              end
         end
 
         # Note if this is a #project or #goal
@@ -228,8 +228,8 @@ class NPNote
     titleTrunc = @title[0..37]
     endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
-    out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
+    next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
+    out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
     if @is_project || @is_goal # make P/G italic
       puts out.colorize(colour).italic
     else
@@ -244,8 +244,8 @@ class NPNote
     mark = '[-]' if @is_cancelled
     endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
-    nextReviewDateFormatted = @nextReviewDate ? @nextReviewDate.strftime(DATE_FORMAT) : ''
-    out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @reviewInterval, nextReviewDateFormatted)
+    next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
+    out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
     puts out
   end
 
@@ -260,6 +260,7 @@ class NPNote
     # fileName optional to identify a note by filename instead of title or date.
     #   Searches first general notes, then calendar notes for the filename.
     #   If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
+    # FIXME: probably here that emojis aren't working
     uri = "noteplan://x-callback-url/openNote?noteTitle=#{@title}"
     uriEncoded = URI.escape(uri, ' &') # by default & isn't escaped, so change that
     begin
@@ -348,7 +349,7 @@ class NPNote
     end
   end
 
-  def list_person_mentioned(tag)
+  def list_tag_mentions(tag)
     # List any lines that @-mention the parameter
     f = File.open(@filename, 'r')
     lines = []
@@ -438,8 +439,8 @@ until quit
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
 
-        nrd = notes[i].nextReviewDate
-        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].nextReviewDate}"
+        nrd = notes[i].next_review_date
+        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].next_review_date}"
         if nrd && (nrd <= TodaysDate)
           notesto_review.push(notes[i].id) # Save list of ID of notes overdue for review
         else
@@ -458,8 +459,8 @@ until quit
     notesAllOrdered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
-    notesto_reviewOrdered = notesto_review.sort_by { |s| notes[s].nextReviewDate }
-    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].nextReviewDate ? notes[s].nextReviewDate.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
+    notesto_reviewOrdered = notesto_review.sort_by { |s| notes[s].next_review_date }
+    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
@@ -519,17 +520,17 @@ until quit
     end
 
   when 'l'
-    # Show @people annotations for those listed in atTags
-    puts "\n----------------------------- People Mentioned ----------------------------------------------"
+    # Show @tags from those listed in atTags
+    puts "\n--------------------------------- Tags Mentioned --------------------------------------"
     MENTIONS_TO_FIND.each do |p|
       puts
       puts "#{p} mentions:".bold
 
       notesto_reviewOrdered.each do |n|
-        notes[n].list_person_mentioned(p)
+        notes[n].list_tag_mentions(p)
       end
       notesOtherActiveOrdered.each do |n|
-        notes[n].list_person_mentioned(p)
+        notes[n].list_tag_mentions(p)
       end
     end
 
@@ -560,30 +561,28 @@ until quit
       rescue StandardError
         puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
-    else
-      if !notesto_reviewOrdered.empty?
-        noteIDto_review = notesto_reviewOrdered.first
-        notes[noteIDto_review].open_note
-        # puts "       Press any key when finished reviewing '#{notes[noteIDto_review].title}' ..."
-        print '  Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ... press any key when finished. '
-        gets
+    elsif !notesto_reviewOrdered.empty?
+      noteIDto_review = notesto_reviewOrdered.first
+      notes[noteIDto_review].open_note
+      # puts "       Press any key when finished reviewing '#{notes[noteIDto_review].title}' ..."
+      print '  Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ... press any key when finished. '
+      gets
 
-        # update the @reviewed() date for the note just reviewed
-        notes[noteIDto_review].update_last_review_date
-        # move this from notesto_review to notesOtherActive
-        notesto_review.delete(noteIDto_review)
-        notesto_reviewOrdered.delete(noteIDto_review)
-        notesOtherActive.push(noteIDto_review)
-        notesOtherActiveOrdered.push(noteIDto_review)
-        # Clean up this file
-        begin
-          success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDto_review].filename)
-        rescue StandardError
-          puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
-        end
-      else
-        puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
+      # update the @reviewed() date for the note just reviewed
+      notes[noteIDto_review].update_last_review_date
+      # move this from notesto_review to notesOtherActive
+      notesto_review.delete(noteIDto_review)
+      notesto_reviewOrdered.delete(noteIDto_review)
+      notesOtherActive.push(noteIDto_review)
+      notesOtherActiveOrdered.push(noteIDto_review)
+      # Clean up this file
+      begin
+        success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDto_review].filename)
+      rescue StandardError
+        puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
       end
+    else
+      puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
     end
 
   when 's'
