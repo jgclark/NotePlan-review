@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.6, 17.6.2020
+# (c) Jonathan Clark, v1.2.8, 18.7.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -12,7 +12,7 @@
 #
 # Shows a summary of the notes, grouped by active and then closed.
 # The active ones also have a list of the number of open / waiting / closed tasks.
-# From NotePlan v2.5 it also covers notes in sub-directories, but ignores notes
+# From NotePlan v2.4 it also covers notes in sub-directories, but ignores notes
 # in the special @Archive and @Trash sub-directories (or others beginning @).
 #
 # Can also show a list of projects, and run related npStats and npClean scripts
@@ -41,14 +41,16 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
-STORAGE_TYPE = 'iCloud'.freeze # or Dropbox
+STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
 MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church'].freeze
 CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'.freeze
 STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
-NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
-              else
+NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
+              elsif STORAGE_TYPE == 'CloudKit'
+                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
+              else
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
               end
 USER = Etc.getlogin # for debugging when running by launchctl
 
