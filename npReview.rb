@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan project review
-# (c) Jonathan Clark, v1.2.6, 17.6.2020
+# (c) Jonathan Clark, v1.2.7, 12.7.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -616,7 +616,7 @@ until quit
   end
 
   # now ask again
-  print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject list,".colorize(InstructionColour)
+  print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
   print "\n(q)uit, (r)eview next, (s)ave summary, (t) show stats, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
   input = gets
   verb = input[0].downcase
