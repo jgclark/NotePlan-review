@@ -12,7 +12,7 @@ To add the project functionality in a note file use this structure:
   - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
   - a @review() field, using terms like '2m', '1w'
 
-From NP v2.5? this reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders.
+This reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders). This was introduced in NotePlan v2.4 and made much more visible in v3.0.
 
 ## Possible actions
 It shows a summary of the **projects ready for review**, grouped by active and then not active (archived or on-hold) projects. It then waits for user typed input to select one of the following options:
@@ -34,7 +34,7 @@ Before running some gems need installing: `gem install fuzzy_match colorize` and
 
 Set the following Constants at the top of the file:
 - <code>USERNAME</code></code>: set machine username manually, as automated methods don't seek to work.
-- <code>STORAGE_TYPE</code>: select whether you're using iCloud for storage (the default) or Drobpox
+- <code>STORAGE_TYPE</code>: select whether you're using `iCloud` for storage (the default) or `CloudKit` (from v3.0) or `Drobpox`. If you're not sure, see NotePlan's `Sync Settings`.
 - <code>MENTIONS_TO_FIND</code>: list of @tags to list when found in open tasks
 - <code>CLEAN_SCRIPT_PATH</code>: full path and filename of optional <code>npClean</code> script which can be run
 - <code>STATS_SCRIPT_PATH</code>: full path and filename of optional <code>npStats</code> script which can be run by 
