@@ -438,7 +438,7 @@ until quit
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
       Dir.chdir(NP_NOTE_DIR)
-      Dir.glob("{[!@]**/*,*}.txt").each do |this_file|
+      Dir.glob('{[!@]**/*,*}.txt').each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
 
@@ -620,7 +620,7 @@ until quit
   end
 
   # now ask again
-  print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject list,".colorize(InstructionColour)
+  print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
   print "\n(q)uit, (r)eview next, (s)ave summary, (t) show stats, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
   input = gets
   verb = input[0].downcase
