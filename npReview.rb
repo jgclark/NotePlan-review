@@ -18,7 +18,7 @@
 # Can also show a list of projects, and run related npStats and npClean scripts
 # from its related GitHub projects.
 #
-# Requires gems fuzzy_match  (> gem install fuzzy_match)
+# Requires gems fuzzy_match and colorize (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
