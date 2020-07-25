@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
-# NotePlan project review
-# (c) Jonathan Clark, v1.2.8, 18.7.2020
+# NotePlan Review script
+# by Jonathan Clark, v1.2.9, 25.7.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -15,20 +15,22 @@
 # From NotePlan v2.4 it also covers notes in sub-directories, but ignores notes
 # in the special @Archive and @Trash sub-directories (or others beginning @).
 #
-# Can also show a list of projects, and run related npStats and npClean scripts
+# Can also show a list of projects, and run related npStats and npTools scripts
 # from its related GitHub projects.
 #
 # Requires gems fuzzy_match and colorize (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
+VERSION = '1.2.9'.freeze
 
 require 'date'
 require 'time'
 require 'open-uri'
 require 'etc' # for login lookup
-require 'fuzzy_match' # gem install fuzzy_match
-require 'colorize' # gem install colorize (for coloured output using https://github.com/fazibear/colorize)
+require 'fuzzy_match'
+require 'colorize'
+require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
 # Constants
 DATE_FORMAT = '%d.%m.%y'.freeze
@@ -42,7 +44,7 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
 MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church'].freeze
-CLEAN_SCRIPT_PATH = '/Users/jonathan/bin/npClean'.freeze
+TOOLS_SCRIPT_PATH = '/Users/jonathan/bin/npTools'.freeze
 STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
 STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
 NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
@@ -304,7 +306,7 @@ class NPNote
     # and add new lastReviewDate(<today>)
     metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})" # feels like there ought to be a space between the items, but in practice not.
 
-    # in the rest of the lines, do some clean up:
+    # in the rest of the lines, do some tools up:
     n = 2
     while n < line_count
       # remove any #waiting tags on complete tasks
@@ -374,6 +376,20 @@ class NPNote
     end
   end
 end
+
+#-------------------------------------------------------------------------
+# Setup program options
+#-------------------------------------------------------------------------
+options = {}
+opt_parser = OptionParser.new do |opts|
+  opts.banner = "NotePlan Reviewer v#{VERSION}. Details at https://github.com/jgclark/NotePlan-review/\nUsage: npReview.rb [options]"
+  opts.separator ''
+  opts.on('-h', '--help', 'Show this help') do
+    puts opts
+    exit
+  end
+end
+opt_parser.parse! # parse out options, leaving file patterns to process
 
 #=======================================================================================
 # Main loop
@@ -495,15 +511,15 @@ until quit
     # show summary count
     puts "     (Total: #{notesto_review.count} notes)".colorize(ActiveColour)
 
-  when 'c'
-    # go and run the clean up script, npClean, which defaults to all files changed in last 24 hours
+  when 't'
+    # go and run the tools script, npTools, which defaults to all files changed in last 24 hours
     begin
-      success = system('ruby', CLEAN_SCRIPT_PATH)
+      success = system('ruby', TOOLS_SCRIPT_PATH)
     rescue StandardError
-      puts '  Error trying to run npClean script -- please check it has been configured in CLEAN_SCRIPT_PATH'.colorize(WarningColour)
+      puts '  Error trying to run npTools script -- please check it has been configured in TOOLS_SCRIPT_PATH'.colorize(WarningColour)
     end
 
-  when 't'
+  when 'h'
     # go and run the statistics script, npStats
     begin
       success = system('ruby', STATS_SCRIPT_PATH)
@@ -558,11 +574,11 @@ until quit
       notesto_reviewOrdered.delete(noteID)
       notesOtherActive.push(noteID)
       notesOtherActiveOrdered.push(noteID)
-      # Clean up this file
+      # Run Tools on this file
       begin
-        success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteID].filename)
+        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
-        puts '  Error trying to clean '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
+        puts '  Error trying to run tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
     elsif !notesto_reviewOrdered.empty?
       noteIDto_review = notesto_reviewOrdered.first
@@ -578,11 +594,11 @@ until quit
       notesto_reviewOrdered.delete(noteIDto_review)
       notesOtherActive.push(noteIDto_review)
       notesOtherActiveOrdered.push(noteIDto_review)
-      # Clean up this file
+      # Run Tools on this file
       begin
-        success = system('ruby', CLEAN_SCRIPT_PATH, notes[noteIDto_review].filename)
+        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteIDto_review].filename)
       rescue StandardError
-        puts '  Error trying to clean '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
+        puts '  Error trying to tools '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
       end
     else
       puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
@@ -620,8 +636,8 @@ until quit
   end
 
   # now ask again
-  print "\nCommands: re-read & show (a)ll, (c)lean up, (e)dit note, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
-  print "\n(q)uit, (r)eview next, (s)ave summary, (t) show stats, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
+  print "\nCommands: re-read & show (a)ll, (e)dit note, s(h)ow stats, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
+  print "\n(q)uit, (r)eview next, (s)ave summary, (t) run tools, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
   input = gets
   verb = input[0].downcase
 end
