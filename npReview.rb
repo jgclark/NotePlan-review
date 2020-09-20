@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.9, 25.7.2020
+# by Jonathan Clark, v1.2.10, 20.9.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -22,7 +22,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.9'.freeze
+VERSION = '1.2.10'.freeze
 
 require 'date'
 require 'time'
@@ -304,9 +304,11 @@ class NPNote
     metadata = lines[1]
     metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
     # and add new lastReviewDate(<today>)
-    metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})" # feels like there ought to be a space between the items, but in practice not.
+    metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})"
+    # then remove multiple consecutive spaces which seem to creep in, with just one
+    metadata.gsub!(%r{\s{2,12}}, ' ')
 
-    # in the rest of the lines, do some tools up:
+    # in the rest of the lines, do some clean up:
     n = 2
     while n < line_count
       # remove any #waiting tags on complete tasks
@@ -333,7 +335,7 @@ class NPNote
       puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
     end
 
-    print "Updated review date.\n" # " for " + "#{@title}".bold
+    puts "    Updated review date for #{@filename}."
   end
 
   def list_waiting_tasks
@@ -454,7 +456,7 @@ until quit
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
       Dir.chdir(NP_NOTE_DIR)
-      Dir.glob('{[!@]**/*,*}.txt').each do |this_file|
+      Dir.glob('{[!@]**/*,*}.{txt,md}').each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         next unless notes[i].is_active && !notes[i].is_cancelled
 
