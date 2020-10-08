@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.2.11, 8.10.2020
+- [Fix] Was wrongly counting cancelled tasks as open
+- [Change] Improve the main task summary display to improve colouring, including highlighting overdue projects and project reviews
+- [Change] Improve the main task summary display, by removing the review interval field, and presenting the due and review dates as relative dates
+
 ## v1.2.10, 20.9.2020
 - [New] Pick up .md files, not just .txt files (issue 9)
 

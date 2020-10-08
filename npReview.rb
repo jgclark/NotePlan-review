@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.10, 20.9.2020
+# by Jonathan Clark, v1.2.11, 8.10.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -22,7 +22,8 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.10'.freeze
+# TODO: add back in non-active but not in archive directory
+VERSION = '1.2.11'.freeze
 
 require 'date'
 require 'time'
@@ -63,12 +64,17 @@ USER = Etc.getlogin # for debugging when running by launchctl
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
 String.disable_colorization false
+NormalColour = :default
 CancelledColour = :light_magenta
-CompletedColour = :light_green
-ReviewNeededColour = :light_red
-ActiveColour = :light_yellow
+CompletedColour = :green
+ReviewNeededColour = :light_yellow
 WarningColour = :light_red
 InstructionColour = :light_cyan
+GoalColour = :light_green
+ProjectColour = :light_blue
+
+# other constants
+HEADER_LINE = "\n    Title                                  Open Wait Done Due       Completed   NextReview".freeze
 
 # other globals
 notes = [] # to hold all our note objects
@@ -115,7 +121,7 @@ class NPNote
     @review_interval = nil
     @lastReviewDate = nil
     @next_review_date_relative = nil
-    @codes = nil
+    # @codes = nil
     @open = @waiting = @done = 0
     @due_date = nil
     @next_review_date = nil
@@ -172,16 +178,16 @@ class NPNote
         # @@@ something wrong with regex but I can't see what, so removing the logic
         # @metadata_line.scan(/[PpFfSsWwBb][0-9]+/)  { |m| @codes = m.join(' ').downcase }
         # If no codes given, but this is a goal or project, then use a basic code
-        if @codes.nil?
-          @codes = 'P' if @is_project
-          @codes = 'G' if @is_goal
-        end
+        # if @codes.nil?
+        #   @codes = 'P' if @is_project
+        #   @codes = 'G' if @is_goal
+        # end
 
         # Now read through rest of file, counting number of open, waiting, done tasks
         f.each_line do |line|
           if line =~ /\[x\]/ # a completed task
             @done += 1
-          elsif line =~ /^\s*\*\s+/ # a task, but (by implication) not completed
+          elsif line =~ /^\s*\*\s+/ && line !~ /\[-\]/ # a task, but (by implication) not completed or cancelled
             if line =~ /#waiting/
               @waiting += 1 # count this as waiting not open
             else
@@ -221,27 +227,41 @@ class NPNote
 
   def print_summary
     # Pretty print a summary for this NP note to screen
-    mark = '[x] '
-    colour = CompletedColour
-    if @is_active
-      mark = '[ ] '
-      colour = ActiveColour
+    mark = '[ ]'
+    title_colour = NormalColour
+    title_colour = GoalColour if @is_goal
+    title_colour = ProjectColour if @is_project
+    if @is_completed
+      mark = '[x]'
+      title_colour = CompletedColour
     end
     if @is_cancelled
-      mark = '[-] '
-      colour = CancelledColour
+      mark = '[-]'
+      title_colour = CancelledColour
     end
-    colour = ReviewNeededColour if @to_review
-    titleTrunc = @title[0..37]
-    endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
+    title_trunc = @title[0..37]
+    endDateFormatted = @due_date ? relative_date(@due_date) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
-    next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
-    out = format('%s %-38s %5s %3d %3d %3d  %8s %9s %-3s %10s', mark, titleTrunc, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
-    if @is_project || @is_goal # make P/G italic
-      puts out.colorize(colour).italic
+    next_review_dateFormatted = @next_review_date ? relative_date(@next_review_date) : ''
+    out_pt1 = format('%s %-38s', mark, title_trunc)
+    out_pt2 = format(' %4d %4d %4d', @open, @waiting, @done)
+    out_pt3 = format(' %-10s', endDateFormatted)
+    out_pt4 = format(' %10s', completeDateFormatted)
+    out_pt5 = format(' %-10s', next_review_dateFormatted)
+    print out_pt1.colorize(title_colour)
+    print out_pt2
+    if @due_date && @due_date < TodaysDate
+      print out_pt3.colorize(WarningColour)
     else
-      puts out.colorize(colour)
+      print out_pt3
     end
+    print out_pt4
+    if @next_review_date && @next_review_date < TodaysDate
+      print out_pt5.colorize(ReviewNeededColour)
+    else
+      print out_pt5
+    end
+    print "\n"
   end
 
   def print_summary_to_file
@@ -252,7 +272,7 @@ class NPNote
     endDateFormatted = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completeDateFormatted = @completeDate ? @completeDate.strftime(DATE_FORMAT) : ''
     next_review_dateFormatted = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
-    out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @codes, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
+    out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @open, @waiting, @done, endDateFormatted, completeDateFormatted, @review_interval, next_review_dateFormatted)
     puts out
   end
 
@@ -379,6 +399,50 @@ class NPNote
   end
 end
 
+
+def relative_date(date)
+  # Return rough relative string version of difference between date and today.
+  # Don't return all the detail, but just the most significant unit (year, month, week, day)
+  # If date is in the past then add 'ago'.
+  # e.g. today, 3w ago, 2m, 4y ago.
+  # Accepts date in normal Ruby Date type
+  is_past = false
+  diff = (date - TodaysDate).to_i # need to cast to integer as otherwise it seems to be type rational
+  if diff.negative? then 
+    diff = diff.abs
+    is_past = true
+  end
+  if diff == 0
+    out = "today"
+  elsif diff == 1
+    out = "#{diff} day"
+  elsif diff < 9
+    out = "#{diff} days"
+  elsif diff < 12
+    out = "#{(diff/7.0).round} wk"
+  elsif diff < 29
+    out = "#{(diff/7.0).round} wks"
+  elsif diff < 550
+    out = "#{(diff/30.4).round} mon"
+  else
+    out = "#{(diff/365.0).round} yrs"
+  end
+  out += " ago" if is_past
+  return out
+
+  # # test cases for relative_date() for testing on 7.10.2020
+  # relative_date(Date.today)
+  # relative_date(Date.new(2020, 10, 5))
+  # relative_date(Date.new(2020, 7, 20))
+  # relative_date(Date.new(2020, 10, 10))
+  # relative_date(Date.new(2020, 10, 20))
+  # relative_date(Date.new(2020, 11, 10))
+  # relative_date(Date.new(2021, 3, 10))
+  # relative_date(Date.new(2021, 10, 7))
+  # relative_date(Date.new(2022, 4, 7))
+  # relative_date(Date.new(2022, 8, 7))
+end
+
 #-------------------------------------------------------------------------
 # Setup program options
 #-------------------------------------------------------------------------
@@ -431,12 +495,12 @@ until quit
   case verb
   when 'p'
     # Show project summary
-    puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
-    puts '--------------------------------------- Projects List ------------------------------------------'
+    puts HEADER_LINE.bold    
+    puts '--------------------------------------- Projects List ---------------------------------------'
     notes.each do |n|
       n.print_summary  if n.is_project
     end
-    puts "\n---------------------------------------- Goals List --------------------------------------------"
+    puts "----------------------------------------- Goals List ----------------------------------------"
     notes.each do |n|
       n.print_summary  if n.is_goal
     end
@@ -485,7 +549,7 @@ until quit
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
-    puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
+    puts HEADER_LINE.bold
     if notesArchived.count.positive?
       puts '-------------------------------- Not Active ----------------------------------------------------'
       notesArchived.each do |n|
@@ -505,7 +569,7 @@ until quit
 
   when 'v'
     # Show all notes to review
-    puts "\n     Title                                        Opn Wat Don Due       Completed Int  NxtReview".bold
+    puts HEADER_LINE.bold
     puts '------------------------------ Ready to review -------------------------------------------------'
     notesto_reviewOrdered.each do |n|
       notes[n].print_summary
