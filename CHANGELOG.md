@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.12, 8.10.2020
+- [Change] Now show completed and cancelled notes in the lists again
+
 ## v1.2.11, 8.10.2020
 - [Fix] Was wrongly counting cancelled tasks as open
 - [Change] Improve the main task summary display to improve colouring, including highlighting overdue projects and project reviews
