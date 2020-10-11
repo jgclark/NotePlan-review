@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.12, 9.10.2020
+# by Jonathan Clark, v1.2.13, 12.10.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -22,8 +22,10 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-# TODO: add back in non-active but not in archive directory
-VERSION = '1.2.12'.freeze
+VERSION = '1.2.13'.freeze
+# TODO: rationalise summary lines to fit better with npStats. So, 84 'active' tasks.
+# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f 
+#                 Projects: 104 + 6w / 76 + 20f + 7w 
 
 require 'date'
 require 'time'
@@ -74,7 +76,7 @@ GoalColour = :light_green
 ProjectColour = :yellow
 
 # other constants
-HEADER_LINE = "\n    Title                                  Open Wait Done Due         Completed NextReview".freeze
+HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
 # other globals
 notes = [] # to hold all our note objects
@@ -244,11 +246,12 @@ class NPNote
       mark = '[-]'
       title_colour = CancelledColour
     end
-    next_review_date_fmtd = @next_review_date ? relative_date(@next_review_date) : ''
+    # format next review to be relative (or blank if note is complete)
+    next_review_date_fmtd = @next_review_date && !@is_completed ? relative_date(@next_review_date) : ''
     out_pt1 = format('%s %-38s', mark, title_trunc)
     out_pt2 = format(' %4d %4d %4d', @open, @waiting, @done)
     out_pt3 = format(' %-10s', end_date_fmtd)
-    out_pt4 = format(' %10s', completed_date_fmtd)
+    out_pt4 = format(' %-10s', completed_date_fmtd)
     out_pt5 = format(' %-10s', next_review_date_fmtd)
     print out_pt1.colorize(title_colour)
     print out_pt2
@@ -357,7 +360,13 @@ class NPNote
       puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
     end
 
-    puts "    Updated review date for #{@filename}."
+    # now update this date in the object, so the next display will be correct
+    @next_review_date = if @lastReviewDate
+                                calc_next_review(TodaysDate, @review_interval)
+                              else
+                                TodaysDate
+                              end
+    puts "  Updated review date in object for #{@filename}."
   end
 
   def list_waiting_tasks
@@ -499,13 +508,13 @@ until quit
   when 'p'
     # Show project summary
     puts HEADER_LINE.bold    
-    puts '----- Projects ------------------------------------------------------------------------------'
+    puts '--- Projects --------------------------------------------------------------------------------'
     # TODO: change this to be ordered by due date
     # need to create/clear new array for this and then sort
     notes.each do |n|
       n.print_summary  if n.is_project
     end
-    puts '----- Goals ---------------------------------------------------------------------------------'
+    puts '--- Goals -----------------------------------------------------------------------------------'
     # TODO: order by review date
     # need to create/clear new array for this and then sort
     notes.each do |n|
@@ -560,7 +569,7 @@ until quit
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_archived.count.positive? || notes_cancelled.count.positive?
-      puts '----- Not Active -------------------------------------------------------------------------------'
+      puts '--- Not Active ---------------------------------------------------------------------------------'
       notes_archived.each do |n|
         notes[n].print_summary
       end
@@ -568,11 +577,11 @@ until quit
         notes[n].print_summary
       end
     end
-    puts '----- Active and Reviewed --------------------------------------------------------------------------'
+    puts '--- Active and Reviewed ------------------------------------------------------------------------'
     notesOtherActiveOrdered.each do |n|
       notes[n].print_summary
     end
-    puts '----- Ready to review --------------------------------------------------------------------------'
+    puts '--- Ready to review ----------------------------------------------------------------------------'
     notes_to_reviewOrdered.each do |n|
       notes[n].print_summary
     end
@@ -582,7 +591,7 @@ until quit
   when 'v'
     # Show all notes to review
     puts HEADER_LINE.bold
-    puts '----- Ready to review --------------------------------------------------------------------------'
+    puts '--- Ready to review ----------------------------------------------------------------------------'
     notes_to_reviewOrdered.each do |n|
       notes[n].print_summary
     end
@@ -641,8 +650,7 @@ until quit
     if best_match
       noteID = titleList.find_index(best_match)
       notes[noteID].open_note
-      # puts "       Reviewing closest match note '#{best_match}' ... press any key when finished."
-      print '  Reviewing closest match note ' + best_match.to_s. bold + ' ... press any key when finished. '
+      print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
       gets
 
       # update the @reviewed() date for the note just reviewed
@@ -661,8 +669,7 @@ until quit
     elsif !notes_to_reviewOrdered.empty?
       noteIDto_review = notes_to_reviewOrdered.first
       notes[noteIDto_review].open_note
-      # puts "       Press any key when finished reviewing '#{notes[noteIDto_review].title}' ..."
-      print '  Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ... press any key when finished. '
+      print 'Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ...when finished press any key.'
       gets
 
       # update the @reviewed() date for the note just reviewed
@@ -701,7 +708,7 @@ until quit
 
   when 'w'
     # list @waiting items in open notes
-    puts "\n-------------------------------------- #Waiting Tasks -----------------------------------------"
+    puts "\n------------------------------------ #Waiting Tasks ---------------------------------------"
     notes_to_reviewOrdered.each do |n|
       notes[n].list_waiting_tasks
     end

@@ -1,6 +1,9 @@
 # CHANGELOG
 
-## v1.2.12, 8.10.2020
+## v1.2.13, 12.10.2020
+- [Fix] Show updated 'Next Review' date after a Review for a note 
+
+## v1.2.12, 9.10.2020
 - [Change] Now show completed and cancelled notes in the lists again
 
 ## v1.2.11, 8.10.2020
