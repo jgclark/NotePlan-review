@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.13, 12.10.2020
+# by Jonathan Clark, v1.2.13, 13.10.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -236,21 +236,25 @@ class NPNote
     title_colour = NormalColour
     title_colour = GoalColour if @is_goal
     title_colour = ProjectColour if @is_project
-    end_date_fmtd = @due_date ? relative_date(@due_date) : ''
+    due_date_fmtd = @due_date ? relative_date(@due_date) : ''
     completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT) : ''
+    # format next review to be relative (or blank if note is complete)
+    next_review_date_fmtd = @next_review_date && !@is_completed ? relative_date(@next_review_date) : ''
     if @is_completed
       mark = '[x]'
       title_colour = CompletedColour
+      due_date_fmtd = '-'
+      next_review_date_fmtd = '-'
     end
     if @is_cancelled
       mark = '[-]'
       title_colour = CancelledColour
+      due_date_fmtd = '-'
+      next_review_date_fmtd = '-'
     end
-    # format next review to be relative (or blank if note is complete)
-    next_review_date_fmtd = @next_review_date && !@is_completed ? relative_date(@next_review_date) : ''
     out_pt1 = format('%s %-38s', mark, title_trunc)
     out_pt2 = format(' %4d %4d %4d', @open, @waiting, @done)
-    out_pt3 = format(' %-10s', end_date_fmtd)
+    out_pt3 = format(' %-10s', due_date_fmtd)
     out_pt4 = format(' %-10s', completed_date_fmtd)
     out_pt5 = format(' %-10s', next_review_date_fmtd)
     print out_pt1.colorize(title_colour)
@@ -274,10 +278,10 @@ class NPNote
     mark = '[x]'
     mark = '[ ]' if @is_active
     mark = '[-]' if @is_cancelled
-    end_date_fmtd = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
+    due_date_fmtd = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
     completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT) : ''
     next_review_date_fmtd = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
-    out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @open, @waiting, @done, end_date_fmtd, completed_date_fmtd, @review_interval, next_review_date_fmtd)
+    out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @open, @waiting, @done, due_date_fmtd, completed_date_fmtd, @review_interval, next_review_date_fmtd)
     puts out
   end
 
@@ -480,10 +484,10 @@ input = ''
 searchString = best_match = nil
 titleList = []
 notes_to_review = [] # list of ID of notes overdue for review
-notes_to_reviewOrdered = []
-notesOtherActive = [] # list of ID of other active notes
-notesOtherActiveOrdered = []
-notes_archived = []      # list of ID of archived notes
+notes_to_review_ord = []
+notes_other_active = [] # list of ID of other active notes
+notes_other_active_ord = []
+notes_completed = []      # list of ID of archived notes
 notes_cancelled = []     # list of ID of cancelled notes
 notes_all_ordered = []    # list of IDs of all notes (used for summary writer)
 
@@ -511,13 +515,13 @@ until quit
     puts '--- Projects --------------------------------------------------------------------------------'
     # TODO: change this to be ordered by due date
     # need to create/clear new array for this and then sort
-    notes.each do |n|
+    notes_all_ordered.each do |n|
       n.print_summary  if n.is_project
     end
     puts '--- Goals -----------------------------------------------------------------------------------'
     # TODO: order by review date
     # need to create/clear new array for this and then sort
-    notes.each do |n|
+    notes_all_ordered.each do |n|
       n.print_summary  if n.is_goal
     end
 
@@ -526,10 +530,10 @@ until quit
     i = 0
     notes.clear # clear if not already empty
     notes_to_review.clear
-    notes_to_reviewOrdered.clear
-    notesOtherActive.clear
-    notesOtherActiveOrdered.clear
-    notes_archived.clear
+    notes_to_review_ord.clear
+    notes_other_active.clear
+    notes_other_active_ord.clear
+    notes_completed.clear
     notes_cancelled.clear
     notes_all_ordered.clear
 
@@ -541,14 +545,15 @@ until quit
         notes[i] = NPNote.new(this_file, i)
         # next unless notes[i].is_active && !notes[i].is_cancelled
 
+        # add to relevant lists (arrays) of categories of notes
         nrd = notes[i].next_review_date
-        # puts "#{i}: #{notes[i].title} #{notes[i].due_date}, #{notes[i].next_review_date}"
-        # TODO: extend here to add notes_archived and notes_cancelled
         if nrd && (nrd <= TodaysDate)
           notes_to_review.push(notes[i].id) # Save list of ID of notes overdue for review
         else
-          notesOtherActive.push(notes[i].id) # Save list of in-active notes
+          notes_other_active.push(notes[i].id) # Save list of in-active notes
         end
+        notes_completed.push(notes[i].id) if notes[i].is_completed
+        notes_cancelled.push(notes[i].id) if notes[i].is_cancelled
         i += 1
       end
     rescue StandardError => e
@@ -559,40 +564,51 @@ until quit
     # Info: https://stackoverflow.com/questions/882070/sorting-an-array-of-objects-in-ruby-by-object-attribute
     # https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
     # https://stackoverflow.com/questions/827649/what-is-the-ruby-spaceship-operator
-    notes_all_ordered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
+    # notes_all_ordered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
+    notes_all_ordered = notes.sort_by { |s| s.due_date ? s.due_date : TodaysDate }
+    
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
-    notes_to_reviewOrdered = notes_to_review.sort_by { |s| notes[s].next_review_date }
-    notesOtherActiveOrdered = notesOtherActive.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
+    notes_to_review_ord = notes_to_review.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date : TodaysDate }
+    # # Here's an example of sorting by two fields:
+    # notes_to_review_ord = notes_to_review.sort{ |a,b|
+    #   if a.status == b.status
+    #     a.created_time <=> b.created_time
+    #   else
+    #     status_order[a.status] <=> status_order[b.status]
+    #   end
+    # }
+    notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
-    if notes_archived.count.positive? || notes_cancelled.count.positive?
+    if notes_completed.count.positive? || notes_cancelled.count.positive?
+    # FIXME: Streaming Video showing here, but not Garden Patio
       puts '--- Not Active ---------------------------------------------------------------------------------'
-      notes_archived.each do |n|
-        notes[n].print_summary
+      notes_completed.each do |n|
+        notes_all_ordered[n].print_summary
       end
       notes_cancelled.each do |n|
-        notes[n].print_summary
+        notes_all_ordered[n].print_summary
       end
     end
     puts '--- Active and Reviewed ------------------------------------------------------------------------'
-    notesOtherActiveOrdered.each do |n|
+    notes_other_active_ord.each do |n|
       notes[n].print_summary
     end
     puts '--- Ready to review ----------------------------------------------------------------------------'
-    notes_to_reviewOrdered.each do |n|
+    notes_to_review_ord.each do |n|
       notes[n].print_summary
     end
     puts '------------------------------------------------------------------------------------------------'
-    puts "     #{notes_to_review.count} notes to review, #{notesOtherActive.count} active, and #{notes_archived.count} archived"
+    puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, and #{notes_completed.count} archived"
 
   when 'v'
     # Show all notes to review
     puts HEADER_LINE.bold
     puts '--- Ready to review ----------------------------------------------------------------------------'
-    notes_to_reviewOrdered.each do |n|
+    notes_to_review_ord.each do |n|
       notes[n].print_summary
     end
     # show summary count
@@ -632,10 +648,10 @@ until quit
       puts
       puts "#{p} mentions:".bold
 
-      notes_to_reviewOrdered.each do |n|
+      notes_to_review_ord.each do |n|
         notes[n].list_tag_mentions(p)
       end
-      notesOtherActiveOrdered.each do |n|
+      notes_other_active_ord.each do |n|
         notes[n].list_tag_mentions(p)
       end
     end
@@ -655,30 +671,30 @@ until quit
 
       # update the @reviewed() date for the note just reviewed
       notes[noteID].update_last_review_date
-      # Attempt to remove this from notesToReivewOrdered
+      # Attempt to remove this from notes_to_reivew_ord
       notes_to_review.delete(noteID)
-      notes_to_reviewOrdered.delete(noteID)
-      notesOtherActive.push(noteID)
-      notesOtherActiveOrdered.push(noteID)
+      notes_to_review_ord.delete(noteID)
+      notes_other_active.push(noteID)
+      notes_other_active_ord.push(noteID)
       # Run Tools on this file
       begin
         success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
         puts '  Error trying to run tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
-    elsif !notes_to_reviewOrdered.empty?
-      noteIDto_review = notes_to_reviewOrdered.first
+    elsif !notes_to_review_ord.empty?
+      noteIDto_review = notes_to_review_ord.first
       notes[noteIDto_review].open_note
       print 'Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ...when finished press any key.'
       gets
 
       # update the @reviewed() date for the note just reviewed
       notes[noteIDto_review].update_last_review_date
-      # move this from notes_to_review to notesOtherActive
+      # move this from notes_to_review to notes_other_active
       notes_to_review.delete(noteIDto_review)
-      notes_to_reviewOrdered.delete(noteIDto_review)
-      notesOtherActive.push(noteIDto_review)
-      notesOtherActiveOrdered.push(noteIDto_review)
+      notes_to_review_ord.delete(noteIDto_review)
+      notes_other_active.push(noteIDto_review)
+      notes_other_active_ord.push(noteIDto_review)
       # Run Tools on this file
       begin
         success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteIDto_review].filename)
@@ -700,7 +716,7 @@ until quit
     notes_all_ordered.each(&:print_summary_to_file)
 
     puts
-    puts "= #{notes_to_review.count} to review, #{notesOtherActive.count} also active, and #{notes_archived.count} archived notes."
+    puts "= #{notes_to_review.count} to review, #{notes_other_active.count} also active, and #{notes_completed.count} archived notes."
 
     $stdout = old_stdout
     sf.close
@@ -709,10 +725,10 @@ until quit
   when 'w'
     # list @waiting items in open notes
     puts "\n------------------------------------ #Waiting Tasks ---------------------------------------"
-    notes_to_reviewOrdered.each do |n|
+    notes_to_review_ord.each do |n|
       notes[n].list_waiting_tasks
     end
-    notesOtherActiveOrdered.each do |n|
+    notes_other_active_ord.each do |n|
       notes[n].list_waiting_tasks
     end
 
