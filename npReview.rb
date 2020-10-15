@@ -24,8 +24,8 @@
 #----------------------------------------------------------------------------------
 VERSION = '1.2.14'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 84 'active' tasks.
-# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f 
-#                 Projects: 104 + 6w / 76 + 20f + 7w 
+# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f
+#                 Projects: 104 + 6w / 76 + 20f + 7w
 
 require 'date'
 require 'time'
@@ -159,9 +159,9 @@ class NPNote
         # default to treating note as active, unless #archive is set
         @is_active = (@metadata_line =~ /#archive/) ? false : true
         # make completed if @completed_date set
-        @is_completed = true if !@completed_date.nil?
+        @is_completed = true unless @completed_date.nil?
         # make cancelled if #cancelled or #someday flag set
-        @is_cancelled = true if (@metadata_line =~ /(#cancelled|#someday)/)
+        @is_cancelled = true if @metadata_line =~ /(#cancelled|#someday)/
         # make to_review if review date set and before today
         @to_review = true if @next_review_date && (nrd <= TodaysDate)
 
@@ -366,10 +366,10 @@ class NPNote
 
     # now update this date in the object, so the next display will be correct
     @next_review_date = if @lastReviewDate
-                                calc_next_review(TodaysDate, @review_interval)
-                              else
-                                TodaysDate
-                              end
+                          calc_next_review(TodaysDate, @review_interval)
+                        else
+                          TodaysDate
+                        end
     puts "  Updated review date in object for #{@filename}."
   end
 
@@ -422,39 +422,27 @@ def relative_date(date)
   # Accepts date in normal Ruby Date type
   is_past = false
   diff = (date - TodaysDate).to_i # need to cast to integer as otherwise it seems to be type rational
-  if diff.negative? then 
+  if diff.negative?
     diff = diff.abs
     is_past = true
   end
-  if diff == 0
-    out = "today"
+  if diff.zero?
+    out = 'today'
   elsif diff == 1
     out = "#{diff} day"
   elsif diff < 9
     out = "#{diff} days"
   elsif diff < 12
-    out = "#{(diff/7.0).round} wk"
+    out = "#{(diff / 7.0).round} wk"
   elsif diff < 29
-    out = "#{(diff/7.0).round} wks"
+    out = "#{(diff / 7.0).round} wks"
   elsif diff < 550
-    out = "#{(diff/30.4).round} mon"
+    out = "#{(diff / 30.4).round} mon"
   else
-    out = "#{(diff/365.0).round} yrs"
+    out = "#{(diff / 365.0).round} yrs"
   end
-  out += " ago" if is_past
-  return out
-
-  # # test cases for relative_date() for testing on 7.10.2020
-  # relative_date(Date.today)
-  # relative_date(Date.new(2020, 10, 5))
-  # relative_date(Date.new(2020, 7, 20))
-  # relative_date(Date.new(2020, 10, 10))
-  # relative_date(Date.new(2020, 10, 20))
-  # relative_date(Date.new(2020, 11, 10))
-  # relative_date(Date.new(2021, 3, 10))
-  # relative_date(Date.new(2021, 10, 7))
-  # relative_date(Date.new(2022, 4, 7))
-  # relative_date(Date.new(2022, 8, 7))
+  out += ' ago' if is_past
+  # return out # this is implied
 end
 
 #-------------------------------------------------------------------------
@@ -609,7 +597,7 @@ until quit
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_completed.count.positive? || notes_cancelled.count.positive?
-    # FIXME: Streaming Video showing here, but not Garden Patio
+      # FIXME: Streaming Video showing here, but not Garden Patio
       puts 'Not Active'.bold + ' -------------------------------------------------------------------------------------'
       notes_completed.each do |n|
         notes_all_ordered[n].print_summary

@@ -46,5 +46,5 @@
 
 ## v1.0.0, 22.2.2020
 - [New] Make the reviewing more flexible
-- [New] Introudce colouring in output
+- [New] Introduce colouring in output
 - [Fix] Bug in handling & in note titles
