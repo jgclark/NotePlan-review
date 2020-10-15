@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.13, 13.10.2020
+# by Jonathan Clark, v1.2.14, 15.10.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -22,10 +22,10 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.13'.freeze
+VERSION = '1.2.14'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 84 'active' tasks.
-# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f 
-#                 Projects: 104 + 6w / 76 + 20f + 7w 
+# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f
+#                 Projects: 104 + 6w / 76 + 20f + 7w
 
 require 'date'
 require 'time'
@@ -159,9 +159,9 @@ class NPNote
         # default to treating note as active, unless #archive is set
         @is_active = (@metadata_line =~ /#archive/) ? false : true
         # make completed if @completed_date set
-        @is_completed = true if !@completed_date.nil?
+        @is_completed = true unless @completed_date.nil?
         # make cancelled if #cancelled or #someday flag set
-        @is_cancelled = true if (@metadata_line =~ /(#cancelled|#someday)/)
+        @is_cancelled = true if @metadata_line =~ /(#cancelled|#someday)/
         # make to_review if review date set and before today
         @to_review = true if @next_review_date && (nrd <= TodaysDate)
 
@@ -366,10 +366,10 @@ class NPNote
 
     # now update this date in the object, so the next display will be correct
     @next_review_date = if @lastReviewDate
-                                calc_next_review(TodaysDate, @review_interval)
-                              else
-                                TodaysDate
-                              end
+                          calc_next_review(TodaysDate, @review_interval)
+                        else
+                          TodaysDate
+                        end
     puts "  Updated review date in object for #{@filename}."
   end
 
@@ -414,7 +414,6 @@ class NPNote
   end
 end
 
-
 def relative_date(date)
   # Return rough relative string version of difference between date and today.
   # Don't return all the detail, but just the most significant unit (year, month, week, day)
@@ -423,39 +422,27 @@ def relative_date(date)
   # Accepts date in normal Ruby Date type
   is_past = false
   diff = (date - TodaysDate).to_i # need to cast to integer as otherwise it seems to be type rational
-  if diff.negative? then 
+  if diff.negative?
     diff = diff.abs
     is_past = true
   end
-  if diff == 0
-    out = "today"
+  if diff.zero?
+    out = 'today'
   elsif diff == 1
     out = "#{diff} day"
   elsif diff < 9
     out = "#{diff} days"
   elsif diff < 12
-    out = "#{(diff/7.0).round} wk"
+    out = "#{(diff / 7.0).round} wk"
   elsif diff < 29
-    out = "#{(diff/7.0).round} wks"
+    out = "#{(diff / 7.0).round} wks"
   elsif diff < 550
-    out = "#{(diff/30.4).round} mon"
+    out = "#{(diff / 30.4).round} mon"
   else
-    out = "#{(diff/365.0).round} yrs"
+    out = "#{(diff / 365.0).round} yrs"
   end
-  out += " ago" if is_past
-  return out
-
-  # # test cases for relative_date() for testing on 7.10.2020
-  # relative_date(Date.today)
-  # relative_date(Date.new(2020, 10, 5))
-  # relative_date(Date.new(2020, 7, 20))
-  # relative_date(Date.new(2020, 10, 10))
-  # relative_date(Date.new(2020, 10, 20))
-  # relative_date(Date.new(2020, 11, 10))
-  # relative_date(Date.new(2021, 3, 10))
-  # relative_date(Date.new(2021, 10, 7))
-  # relative_date(Date.new(2022, 4, 7))
-  # relative_date(Date.new(2022, 8, 7))
+  out += ' ago' if is_past
+  # return out # this is implied
 end
 
 #-------------------------------------------------------------------------
@@ -463,7 +450,7 @@ end
 #-------------------------------------------------------------------------
 options = {}
 opt_parser = OptionParser.new do |opts|
-  opts.banner = "NotePlan Reviewer v#{VERSION}. Details at https://github.com/jgclark/NotePlan-review/\nUsage: npReview.rb [options]"
+  opts.banner = "NotePlan Reviewer v#{VERSION}\nDetails at https://github.com/jgclark/NotePlan-review/\nUsage: npReview.rb [options] [file-pattern]"
   opts.separator ''
   opts.on('-h', '--help', 'Show this help') do
     puts opts
@@ -472,12 +459,38 @@ opt_parser = OptionParser.new do |opts|
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
+# Define the set of files that we're going to review.
+Dir.chdir(NP_NOTE_DIR)
+if ARGV.count.positive?
+  # We have a file pattern given, so restrict file globbing to use it
+  glob_to_use = '' # holds the glob_pattern to use
+  begin
+    # First see if this pattern matches a directory name
+    glob_path_pattern = '*' + ARGV[0] + '*/'
+    paths = Dir.glob(glob_path_pattern)
+    if paths.count.positive?
+      paths.each do |path|
+        # puts " Found matching folder #{path}"
+      end
+      glob_to_use = '{' + paths.join(',') + '}/*.{md,txt}'
+    else
+      # puts " Found no matching folders for #{glob_path pattern}. Will match all filenames across folders instead."
+      glob_to_use = '[!@]**/*' + ARGV[0] + '*.{md,txt}'
+    end
+  rescue StandardError => e
+    puts "ERROR: #{e.exception.message} when reading in files matching pattern #{ARGV[0]}".colorize(WarningColour)
+  end
+else
+  glob_to_use = '{[!@]**/*,*}.{txt,md}'
+end
+puts "Starting npReview for files matching pattern(s) #{glob_to_use}."
+
 #=======================================================================================
 # Main loop
 #=======================================================================================
+
 # Now start interactive loop offering a couple of actions:
 # save summary file, open note in NP
-#---------------------------------------------------------------------------
 quit = false
 verb = 'a' # get going by reading and summarising all notes
 input = ''
@@ -487,9 +500,9 @@ notes_to_review = [] # list of ID of notes overdue for review
 notes_to_review_ord = []
 notes_other_active = [] # list of ID of other active notes
 notes_other_active_ord = []
-notes_completed = []      # list of ID of archived notes
-notes_cancelled = []     # list of ID of cancelled notes
-notes_all_ordered = []    # list of IDs of all notes (used for summary writer)
+notes_completed = [] # list of ID of archived notes
+notes_cancelled = [] # list of ID of cancelled notes
+notes_all_ordered = [] # list of IDs of all notes (used for summary writer)
 
 until quit
   # get title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring') if present
@@ -511,7 +524,7 @@ until quit
   case verb
   when 'p'
     # Show project summary
-    puts HEADER_LINE.bold    
+    puts HEADER_LINE.bold
     puts '--- Projects --------------------------------------------------------------------------------'
     # TODO: change this to be ordered by due date
     # need to create/clear new array for this and then sort
@@ -540,8 +553,7 @@ until quit
     # Read metadata for all note files in the NotePlan directory
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
-      Dir.chdir(NP_NOTE_DIR)
-      Dir.glob('{[!@]**/*,*}.{txt,md}').each do |this_file|
+      Dir.glob(glob_to_use).each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         # next unless notes[i].is_active && !notes[i].is_cancelled
 
@@ -566,7 +578,7 @@ until quit
     # https://stackoverflow.com/questions/827649/what-is-the-ruby-spaceship-operator
     # notes_all_ordered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
     notes_all_ordered = notes.sort_by { |s| s.due_date ? s.due_date : TodaysDate }
-    
+
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
     notes_to_review_ord = notes_to_review.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date : TodaysDate }
@@ -578,14 +590,15 @@ until quit
     #     status_order[a.status] <=> status_order[b.status]
     #   end
     # }
+    # FIXME: can get to nil here with an empty note
     notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_completed.count.positive? || notes_cancelled.count.positive?
-    # FIXME: Streaming Video showing here, but not Garden Patio
-      puts '--- Not Active ---------------------------------------------------------------------------------'
+      # FIXME: Streaming Video showing here, but not Garden Patio
+      puts 'Not Active'.bold + ' -------------------------------------------------------------------------------------'
       notes_completed.each do |n|
         notes_all_ordered[n].print_summary
       end
@@ -593,11 +606,11 @@ until quit
         notes_all_ordered[n].print_summary
       end
     end
-    puts '--- Active and Reviewed ------------------------------------------------------------------------'
+    puts 'Active and Reviewed'.bold + ' ----------------------------------------------------------------------------'
     notes_other_active_ord.each do |n|
       notes[n].print_summary
     end
-    puts '--- Ready to review ----------------------------------------------------------------------------'
+    puts 'Ready to review'.bold + ' --------------------------------------------------------------------------------'
     notes_to_review_ord.each do |n|
       notes[n].print_summary
     end
@@ -736,9 +749,10 @@ until quit
     puts '   Invalid action! Please try again.'.colorize(WarningColour)
   end
 
-  # now ask again
+  # now ask what to do
   print "\nCommands: re-read & show (a)ll, (e)dit note, s(h)ow stats, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
   print "\n(q)uit, (r)eview next, (s)ave summary, (t) run tools, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
+  ARGV.clear # required for 'gets' in the next line not to barf if an ARGV was supplied
   input = gets
   verb = input[0].downcase
 end

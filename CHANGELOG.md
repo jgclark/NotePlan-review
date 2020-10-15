@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.14, 15.10.2020
+- [New] Ability to filter which notes are reviewed (issue 11)
+
 ## v1.2.13, 12.10.2020
 - [Fix] Show updated 'Next Review' date after a Review for a note 
 
@@ -43,5 +46,5 @@
 
 ## v1.0.0, 22.2.2020
 - [New] Make the reviewing more flexible
-- [New] Introudce colouring in output
+- [New] Introduce colouring in output
 - [Fix] Bug in handling & in note titles
