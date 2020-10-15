@@ -9,13 +9,13 @@ To add the project functionality in a note file use this structure:
 - the first line of a NP project file is just a markdown-formatted title
 - the second line contains metadata items:
   - any #hashtags, particularly #active, #archive, #goal and/or #project
-  - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
+  - any @start(), @due(), @completed(), @reviewed() dates, of form YYYY-MM-DD,
   - a @review() field, using terms like '2m', '1w'
 
-This reads notes in sub-folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' sub-folders). This was introduced in NotePlan v2.4 and made much more visible in v3.0.
-
 ## Running the Reviewer
-To run the review script at the command line type `ruby npReview.rb`
+To run the review script at the command line type `ruby npReview.rb [filter]`. This reads notes in NotePlan's folders too (excluding those beginning with an '@' symbol, including the built-in '@Archive' and '@Trash' folders). This was introduced in NotePlan v2.4 and made much more visible in v3.0.
+
+If you supply an argument, it is treated as a **filter**. If this filter matches one or more NotePlan folder name, then only notes in that folder are used. Otherwise this argument will be used to find matching filenames (NB: not note names which can sometimes be different) in all folders (apart from the Archive and Trash).
 
 ### Possible actions
 It shows a summary of the **projects ready for review**, grouped by active and then not active (archived or on-hold) projects. It then waits for user typed input to select one of the following options:
@@ -25,11 +25,11 @@ It shows a summary of the **projects ready for review**, grouped by active and t
 - **h**: show summary of stats for tasks (this runs the separate **npStats.rb** script available from my [NotePlan-stats GitHub project](https://github.com/jgclark/NotePlan-stats/))
 - **l**: list people @mentions in open todos
 - **p**: list all projects
+- **q**: quit the script
 - **r**: review next note in the ready to review list in NotePlan. When you have finished editing, return to the command line and press any key. This then automatically updates the @reviewed(...) date in the note
 - **s**: save summary to a file with today's date in the summaries/ subdirectory (it creates it on the first run of this summary)
 - **t**: run tools script (this runs the separate **npTools.rb** script available from the related [NotePlan-tools GitHub project](https://github.com/jgclark/NotePlan-tools/))
 - **v**: view those to review
-- **q**: quit the script
 - **w**: list all #waiting tasks
 
 ## Installation & Configuration

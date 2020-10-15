@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.14, 15.10.2020
+- [New] Ability to filter which notes are reviewed (issue 11)
+
 ## v1.2.13, 12.10.2020
 - [Fix] Show updated 'Next Review' date after a Review for a note 
 
