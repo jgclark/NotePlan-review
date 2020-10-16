@@ -32,9 +32,9 @@
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
 VERSION = '1.2.15'.freeze
-# TODO: rationalise summary lines to fit better with npStats. So, 84 'active' tasks.
-# TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f
-#                 Projects: 104 + 6w / 76 + 20f + 7w
+# TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
+# TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
+#                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
 
 require 'date'
 require 'time'
@@ -73,13 +73,15 @@ NP_SUMMARIES_DIR = "/Users/#{USERNAME}/Dropbox/NPSummaries".freeze
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
+# These are optimised for a dark background terminal
 String.disable_colorization false
 GoalColour = :light_green
 ProjectColour = :yellow
 NormalColour = :default
 CancelledColour = :light_magenta
 CompletedColour = :green
-ReviewNeededColour = :light_yellow
+ReviewNeededColour = :default #:light_yellow
+ReviewNotNeededColour = :light_black
 WarningColour = :light_red
 InstructionColour = :light_cyan
 
@@ -95,7 +97,7 @@ notes = [] # to hold all our note objects
 # NPNote Class reflects a stored NP note, and gives following methods:
 # - initialize
 # - calc_next_review
-# - print_summary and print_summary_to_file
+# - show_summary_line
 # - open_note
 # - update_last_review_date
 # - list_tag_mentions
@@ -122,7 +124,7 @@ class NPNote
   attr_reader :done
   attr_reader :filename
 
-  # If need be turn the init into a self.fabricate function that first checks
+  # TODO: Ideally turn the init into a self.fabricate function that first checks
   # that the file has enough details to go through init.
   # Then use return nil unless ...
   # def self.fabricate(a, b, c)
@@ -141,10 +143,10 @@ class NPNote
     @is_active = true # assume note is active
     @is_completed = false
     @is_cancelled = false
-    @startDate = nil
+    @start_date = nil
     @completed_date = nil
     @review_interval = nil
-    @lastReviewDate = nil
+    @last_review_date = nil
     @next_review_date_relative = nil
     # @codes = nil
     @open = @waiting = @done = 0
@@ -171,10 +173,10 @@ class NPNote
 
         # Now process line 2 (rest of metadata)
         # the following regex matches returns an array with one item, so make a string (by join), and then parse as a date
-        @metadata_line.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @startDate = Date.parse(m.join) }
+        @metadata_line.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @start_date = Date.parse(m.join) }
         @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
         @metadata_line.scan(%r{(@completed|@finished)\(([0-9\-\./]{6,10})\)}) { |m| @completed_date = Date.parse(m.join) }
-        @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
+        @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @last_review_date = Date.parse(m.join) }
         @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
 
         # make completed if @completed_date set
@@ -187,13 +189,13 @@ class NPNote
 
         # if an active task, then work out reviews
         if @is_active
-          # make to_review if review date set and before today (and active)
-          @to_review = true if @next_review_date && (nrd <= TodaysDate)
           # If an active task and review interval is set, calc next review date.
           # If no last review date set, assume we need to review today.
           if @review_interval
-            @next_review_date = !@lastReviewDate.nil? ? calc_next_review(@lastReviewDate, @review_interval) : TodaysDate
+            @next_review_date = !@last_review_date.nil? ? calc_next_review(@last_review_date, @review_interval) : TodaysDate
           end
+          # make to_review if review date set and before today (and active)
+          @to_review = true if @next_review_date && (@next_review_date <= TodaysDate)
         end
 
         # Note if this is a #project or #goal
@@ -214,7 +216,6 @@ class NPNote
         end
       rescue EOFError # this file is empty so ignore it
         puts "  Error: note #{this_file} is empty, so ignoring it.".colorize(WarningColour)
-        # TODO: Ideally need to reject the file and this object entirely.
       rescue StandardError => e
         puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
       end
@@ -242,7 +243,7 @@ class NPNote
     newDate
   end
 
-  def print_summary
+  def show_summary_line
     # Pretty print a summary for this NP note to screen
     mark = '[ ]'
     title_trunc = @title[0..37]
@@ -251,8 +252,8 @@ class NPNote
     title_colour = ProjectColour if @is_project
     due_date_fmtd = @due_date ? relative_date(@due_date) : ''
     completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT_SCREEN) : ''
-    # format next review to be relative (or blank if note is complete)
-    next_review_date_fmtd = @next_review_date && !@is_completed ? relative_date(@next_review_date) : ''
+    # format next review to be relative (or blank if note is not active)
+    next_review_date_fmtd = @next_review_date ? relative_date(@next_review_date) : ''
     if @is_completed
       mark = '[x]'
       title_colour = CompletedColour
@@ -281,7 +282,7 @@ class NPNote
     if @next_review_date && @next_review_date < TodaysDate
       print out_pt5.colorize(ReviewNeededColour)
     else
-      print out_pt5
+      print out_pt5.colorize(ReviewNotNeededColour)
     end
     print "\n"
   end
@@ -330,10 +331,10 @@ class NPNote
       puts "ERROR: Hit #{e.exception.message} when updating last review date for file #{@filename}".colorize(WarningColour)
     end
 
-    # in the metadata line, cut out the existing mention of lastReviewDate(...)
+    # in the metadata line, cut out the existing mention of last_review_date(...)
     metadata = lines[1]
     metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
-    # and add new lastReviewDate(<today>)
+    # and add new last_review_date(<today>)
     metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})"
     # then remove multiple consecutive spaces which seem to creep in, with just one
     metadata.gsub!(%r{\s{2,12}}, ' ')
@@ -366,7 +367,7 @@ class NPNote
     end
 
     # now update this date in the object, so the next display will be correct
-    @next_review_date = if @lastReviewDate
+    @next_review_date = if @last_review_date
                           calc_next_review(TodaysDate, @review_interval)
                         else
                           TodaysDate
@@ -447,7 +448,7 @@ def relative_date(date)
     out = "#{(diff / 365.0).round} yrs"
   end
   out += ' ago' if is_past
-  # return out # this is implied
+  return out # this is implied
 end
 
 #-------------------------------------------------------------------------
@@ -581,7 +582,9 @@ until quit
     #     status_order[a.status] <=> status_order[b.status]
     #   end
     # }
-    notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
+    # sort by next review date then title
+    # notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
+    notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
@@ -589,19 +592,19 @@ until quit
     if notes_completed.count.positive? || notes_cancelled.count.positive?
       puts 'Not Active'.bold + ' -------------------------------------------------------------------------------------'
       notes_completed.each do |id|
-        notes[id].print_summary
+        notes[id].show_summary_line
       end
       notes_cancelled.each do |id|
-        notes[id].print_summary
+        notes[id].show_summary_line
       end
     end
     puts 'Active and Reviewed'.bold + ' ----------------------------------------------------------------------------'
     notes_other_active_ord.each do |n|
-      notes[n].print_summary
+      notes[n].show_summary_line
     end
     puts 'Ready to review'.bold + ' --------------------------------------------------------------------------------'
     notes_to_review_ord.each do |n|
-      notes[n].print_summary
+      notes[n].show_summary_line
     end
     puts '------------------------------------------------------------------------------------------------'
     puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
@@ -609,9 +612,9 @@ until quit
   when 'v'
     # Show all notes to review
     puts HEADER_LINE.bold
-    puts '--- Ready to review ----------------------------------------------------------------------------'
+    puts 'Ready to review'.bold + ' --------------------------------------------------------------------------------'
     notes_to_review_ord.each do |n|
-      notes[n].print_summary
+      notes[n].show_summary_line
     end
     # show summary count
     puts '------------------------------------------------------------------------------------------------'
@@ -653,14 +656,14 @@ until quit
 
   when 'p'
     # Show project then goal summaries, ordered by due date
-    puts HEADER_LINE.bold    
+    puts HEADER_LINE.bold
     puts '--- Projects --------------------------------------------------------------------------------'
     notes_all_ordered.each do |n|
-      n.print_summary  if n.is_project
+      n.show_summary_line  if n.is_project
     end
     puts '--- Goals -----------------------------------------------------------------------------------'
     notes_all_ordered.each do |n|
-      n.print_summary  if n.is_goal
+      n.show_summary_line  if n.is_goal
     end
 
   when 'q'
@@ -712,29 +715,30 @@ until quit
           puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
         end
         # repeat this if user types 'r' as the any key
-        break if input1 != 'r' 
+        break if input1 != 'r'
       end
     else
       puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
     end
 
   when 's'
-    # write out the unordered summary to summary_filename, temporarily redirecting stdout
+    # write out a summary of all notes to summary_filename, ordered by name
     # using 'w' mode which will truncate any existing file
     begin
       Dir.chdir(NP_SUMMARIES_DIR)
       sf = File.open(summary_filename, 'w')
       sf.puts "# NotePlan Notes summary, #{timeNow}"
-      sf.puts "Title, Open tasks, Waiting tasks, Done tasks, Due date, Completed date, Review interval, Next review date"
+      sf.puts 'Title, Open tasks, Waiting tasks, Done tasks, Start date, Due date, Completed date, Review interval, Next review date'
       notes_all_ordered.each do |n|
         # print summary of this note in one line as a CSV file line
         mark = '[x]'
         mark = '[ ]' if n.is_active
         mark = '[-]' if n.is_cancelled
+        start_date_fmtd = n.start_date ? n.start_date.strftime(DATE_FORMAT_FILE) : ''
         due_date_fmtd = n.due_date ? n.due_date.strftime(DATE_FORMAT_FILE) : ''
         completed_date_fmtd = n.completed_date ? n.completed_date.strftime(DATE_FORMAT_FILE) : ''
         next_review_date_fmtd = n.next_review_date ? n.next_review_date.strftime(DATE_FORMAT_FILE) : ''
-        out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, n.title, n.open, n.waiting, n.done, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
+        out = format('%s %s,%d,%d,%d,%s,%s,%s,%s,%s', mark, n.title, n.open, n.waiting, n.done, start_date_fmtd, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
         sf.puts out
       end
       sf.puts
