@@ -1,8 +1,13 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.14, 16.10.2020
+# by Jonathan Clark, v1.2.15, 16.10.2020
 #----------------------------------------------------------------------------------
+# The script shows a summary of the notes, grouped by status, with option to easily
+# open up each one that needs reviewing in turn in NotePlan. When continuing the
+# script, it automatically updates the last @reviewed(date).
+# It also provides basic statistics on the number of open / waiting / closed tasks.
+#
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
 # - any #hashtags, particularly #Pnn and #active
@@ -10,8 +15,12 @@
 #   but other forms can be parsed as well
 # - a @review_interval() field, using terms like '2m', '1w'
 #
-# Shows a summary of the notes, grouped by active and then closed.
-# The active ones also have a list of the number of open / waiting / closed tasks.
+# These are the note categories:
+# - inactive
+#   - cancelled (noted with the #cancelled or #someday tag)
+#   - completed (noted with the @completed(date) or @finished(date) mention)
+# - active  =  any note that isn't inactive!
+#
 # From NotePlan v2.4 it also covers notes in sub-directories, but ignores notes
 # in the special @Archive and @Trash sub-directories (or others beginning @).
 #
@@ -22,7 +31,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.14'.freeze
+VERSION = '1.2.15'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 84 'active' tasks.
 # TODO: this reports Goals: 86open + 5f + 2w / Stats->81 +2w +5f
 #                 Projects: 104 + 6w / 76 + 20f + 7w
@@ -46,7 +55,7 @@ summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
 
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
-MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church'].freeze
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church', '@liz'].freeze
 TOOLS_SCRIPT_PATH = '/Users/jonathan/bin/npTools'.freeze
 STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
 STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
@@ -152,7 +161,7 @@ class NPNote
         # the following regex matches returns an array with one item, so make a string (by join), and then parse as a date
         @metadata_line.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @startDate = Date.parse(m.join) }
         @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
-        @metadata_line.scan(%r{(@completed|@finish)\(([0-9\-\./]{6,10})\)}) { |m| @completed_date = Date.parse(m.join) }
+        @metadata_line.scan(%r{(@completed|@finished)\(([0-9\-\./]{6,10})\)}) { |m| @completed_date = Date.parse(m.join) }
         @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
         @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
 
@@ -537,7 +546,7 @@ until quit
         # add to relevant lists (arrays) of categories of notes
         # TODO: review the logic here. "Friends 2020" landed in Not Active and ActiveReviewed lists
         nrd = notes[i].next_review_date
-        if nrd && (nrd <= TodaysDate)
+        if nrd && (nrd <= TodaysDate) && !notes[i].is_completed && !notes[i].is_cancelled # TODO: better way to exclude last two?
           notes_to_review.push(notes[i].id) # Save list of ID of notes overdue for review
         else
           notes_other_active.push(notes[i].id) # Save list of in-active notes
@@ -605,14 +614,6 @@ until quit
     # show summary count
     puts "     (Total: #{notes_to_review.count} notes)".colorize(ActiveColour)
 
-  when 't'
-    # go and run the tools script, npTools, which defaults to all files changed in last 24 hours
-    begin
-      success = system('ruby', TOOLS_SCRIPT_PATH)
-    rescue StandardError
-      puts '  Error trying to run npTools script -- please check it has been configured in TOOLS_SCRIPT_PATH'.colorize(WarningColour)
-    end
-
   when 'h'
     # go and run the statistics script, npStats
     begin
@@ -648,17 +649,13 @@ until quit
     end
 
   when 'p'
-    # Show project summary
-    puts HEADER_LINE.bold
+    # Show project then goal summaries, ordered by due date
+    puts HEADER_LINE.bold    
     puts '--- Projects --------------------------------------------------------------------------------'
-    # TODO: change this to be ordered by due date
-    # need to create/clear new array for this and then sort
     notes_all_ordered.each do |n|
       n.print_summary  if n.is_project
     end
     puts '--- Goals -----------------------------------------------------------------------------------'
-    # TODO: order by review date
-    # need to create/clear new array for this and then sort
     notes_all_ordered.each do |n|
       n.print_summary  if n.is_goal
     end
@@ -669,8 +666,8 @@ until quit
     break
 
   when 'r'
-    # If no extra characters given, then open the next note that needs reviewing
     if best_match
+      # If extra characters given, then open the next title that best matches the characters
       noteID = titleList.find_index(best_match)
       print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
       notes[noteID].open_note
@@ -690,23 +687,29 @@ until quit
         puts '  Error trying to run tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
     elsif !notes_to_review_ord.empty?
-      noteID = notes_to_review_ord.first
-      notes[noteID].open_note
-      print 'Reviewing ' + notes[noteID].title.to_s.bold + ' ...when finished press any key.'
-      gets
+      # If no extra characters given, then open the next note that needs reviewing
+      loop do
+        noteID = notes_to_review_ord.first
+        notes[noteID].open_note
+        print 'Reviewing ' + notes[noteID].title.to_s.bold + " ...when finished press any key (or press 'r' to review next one)."
+        input = gets
+        input1 = input[0].downcase
 
-      # update the @reviewed() date for the note just reviewed
-      notes[noteID].update_last_review_date
-      # move this from notes_to_review to notes_other_active
-      notes_to_review.delete(noteID)
-      notes_to_review_ord.delete(noteID)
-      notes_other_active.push(noteID)
-      notes_other_active_ord.push(noteID)
-      # Run Tools on this file
-      begin
-        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
-      rescue StandardError
-        puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
+        # update the @reviewed() date for the note just reviewed
+        notes[noteID].update_last_review_date
+        # move this from notes_to_review to notes_other_active
+        notes_to_review.delete(noteID)
+        notes_to_review_ord.delete(noteID)
+        notes_other_active.push(noteID)
+        notes_other_active_ord.push(noteID)
+        # Run Tools on this file
+        begin
+          success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
+        rescue StandardError
+          puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
+        end
+        # repeat this if user types 'r' as the any key
+        break if input1 != 'r' 
       end
     else
       puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
@@ -728,6 +731,14 @@ until quit
     $stdout = old_stdout
     sf.close
     puts '    Written summary to ' + summaryFilename.to_s.bold
+
+  when 't'
+    # go and run the tools script, npTools, which defaults to all files changed in last 24 hours
+    begin
+      success = system('ruby', TOOLS_SCRIPT_PATH)
+    rescue StandardError
+      puts '  Error trying to run npTools script -- please check it has been configured in TOOLS_SCRIPT_PATH'.colorize(WarningColour)
+    end
 
   when 'w'
     # list @waiting items in open notes
