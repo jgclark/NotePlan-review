@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.14, 15.10.2020
+# by Jonathan Clark, v1.2.14, 16.10.2020
 #----------------------------------------------------------------------------------
 # Assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
@@ -178,14 +178,6 @@ class NPNote
         # Note if this is a #project or #goal
         @is_project = true if @metadata_line =~ /#project/
         @is_goal    = true if @metadata_line =~ /#goal/
-        # look for project etc codes (there might be several, so join with spaces), and make uppercase
-        # @@@ something wrong with regex but I can't see what, so removing the logic
-        # @metadata_line.scan(/[PpFfSsWwBb][0-9]+/)  { |m| @codes = m.join(' ').downcase }
-        # If no codes given, but this is a goal or project, then use a basic code
-        # if @codes.nil?
-        #   @codes = 'P' if @is_project
-        #   @codes = 'G' if @is_goal
-        # end
 
         # Now read through rest of file, counting number of open, waiting, done tasks
         f.each_line do |line|
@@ -469,10 +461,10 @@ if ARGV.count.positive?
     glob_path_pattern = '*' + ARGV[0] + '*/'
     paths = Dir.glob(glob_path_pattern)
     if paths.count.positive?
-      paths.each do |path|
-        # puts " Found matching folder #{path}"
-      end
-      glob_to_use = '{' + paths.join(',') + '}/*.{md,txt}'
+      # paths.each do |path|
+      #   # puts " Found matching folder #{path}"
+      # end
+      glob_to_use += '{' + paths.join(',').gsub('/','') + '}/*.{md,txt}'
     else
       # puts " Found no matching folders for #{glob_path pattern}. Will match all filenames across folders instead."
       glob_to_use = '[!@]**/*' + ARGV[0] + '*.{md,txt}'
@@ -522,22 +514,6 @@ until quit
 
   # Decide what Command to run ...
   case verb
-  when 'p'
-    # Show project summary
-    puts HEADER_LINE.bold
-    puts '--- Projects --------------------------------------------------------------------------------'
-    # TODO: change this to be ordered by due date
-    # need to create/clear new array for this and then sort
-    notes_all_ordered.each do |n|
-      n.print_summary  if n.is_project
-    end
-    puts '--- Goals -----------------------------------------------------------------------------------'
-    # TODO: order by review date
-    # need to create/clear new array for this and then sort
-    notes_all_ordered.each do |n|
-      n.print_summary  if n.is_goal
-    end
-
   when 'a'
     # (Re)parse the data files
     i = 0
@@ -555,9 +531,11 @@ until quit
     begin
       Dir.glob(glob_to_use).each do |this_file|
         notes[i] = NPNote.new(this_file, i)
+        puts "#{i} #{this_file} #{notes[i].filename}"
         # next unless notes[i].is_active && !notes[i].is_cancelled
 
         # add to relevant lists (arrays) of categories of notes
+        # TODO: review the logic here. "Friends 2020" landed in Not Active and ActiveReviewed lists
         nrd = notes[i].next_review_date
         if nrd && (nrd <= TodaysDate)
           notes_to_review.push(notes[i].id) # Save list of ID of notes overdue for review
@@ -669,6 +647,22 @@ until quit
       end
     end
 
+  when 'p'
+    # Show project summary
+    puts HEADER_LINE.bold
+    puts '--- Projects --------------------------------------------------------------------------------'
+    # TODO: change this to be ordered by due date
+    # need to create/clear new array for this and then sort
+    notes_all_ordered.each do |n|
+      n.print_summary  if n.is_project
+    end
+    puts '--- Goals -----------------------------------------------------------------------------------'
+    # TODO: order by review date
+    # need to create/clear new array for this and then sort
+    notes_all_ordered.each do |n|
+      n.print_summary  if n.is_goal
+    end
+
   when 'q'
     # quit the utility
     quit = true
@@ -678,8 +672,8 @@ until quit
     # If no extra characters given, then open the next note that needs reviewing
     if best_match
       noteID = titleList.find_index(best_match)
-      notes[noteID].open_note
       print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
+      notes[noteID].open_note
       gets
 
       # update the @reviewed() date for the note just reviewed
@@ -696,23 +690,23 @@ until quit
         puts '  Error trying to run tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
     elsif !notes_to_review_ord.empty?
-      noteIDto_review = notes_to_review_ord.first
-      notes[noteIDto_review].open_note
-      print 'Reviewing ' + notes[noteIDto_review].title.to_s.bold + ' ...when finished press any key.'
+      noteID = notes_to_review_ord.first
+      notes[noteID].open_note
+      print 'Reviewing ' + notes[noteID].title.to_s.bold + ' ...when finished press any key.'
       gets
 
       # update the @reviewed() date for the note just reviewed
-      notes[noteIDto_review].update_last_review_date
+      notes[noteID].update_last_review_date
       # move this from notes_to_review to notes_other_active
-      notes_to_review.delete(noteIDto_review)
-      notes_to_review_ord.delete(noteIDto_review)
-      notes_other_active.push(noteIDto_review)
-      notes_other_active_ord.push(noteIDto_review)
+      notes_to_review.delete(noteID)
+      notes_to_review_ord.delete(noteID)
+      notes_other_active.push(noteID)
+      notes_other_active_ord.push(noteID)
       # Run Tools on this file
       begin
-        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteIDto_review].filename)
+        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
       rescue StandardError
-        puts '  Error trying to tools '.colorize(WarningColour) + notes[noteIDto_review].title.to_s.colorize(WarningColour).bold
+        puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
     else
       puts "       Way to go! You've no more notes to review :-)".colorize(CompletedColour)
