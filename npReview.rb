@@ -45,13 +45,14 @@ require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
 # Constants
-DATE_FORMAT = '%d.%m.%y'.freeze
+DATE_FORMAT_SCREEN = '%d.%m.%y'.freeze # use shorter form of years when writing to screen
+DATE_FORMAT_FILE = '%d.%m.%Y'.freeze # use full years for writing out to file
 SORTING_DATE_FORMAT = '%y%m%d'.freeze
 DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
 timeNow = Time.now
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 EarlyDate = Date.new(1970, 1, 1)
-summaryFilename = Date.today.strftime('%Y%m%d') + ' Notes summary.md'
+summary_filename = Date.today.strftime('%Y%m%d') + '_notes_summary.csv'
 
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
@@ -67,22 +68,20 @@ NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
               end
 NP_NOTE_DIR = "#{NP_BASE_DIR}/Notes".freeze
-NP_SUMMARIES_DIR = "#{NP_BASE_DIR}/Summaries".freeze
-
-USER = Etc.getlogin # for debugging when running by launchctl
+NP_SUMMARIES_DIR = "/Users/#{USERNAME}/Dropbox/NPSummaries".freeze
 
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
 String.disable_colorization false
+GoalColour = :light_green
+ProjectColour = :yellow
 NormalColour = :default
 CancelledColour = :light_magenta
 CompletedColour = :green
 ReviewNeededColour = :light_yellow
 WarningColour = :light_red
 InstructionColour = :light_cyan
-GoalColour = :light_green
-ProjectColour = :yellow
 
 # other constants
 HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
@@ -115,11 +114,24 @@ class NPNote
   attr_reader :is_goal
   attr_reader :to_review
   attr_reader :metadata_line
+  attr_reader :start_date
   attr_reader :due_date
+  attr_reader :completed_date
   attr_reader :open
   attr_reader :waiting
   attr_reader :done
   attr_reader :filename
+
+  # If need be turn the init into a self.fabricate function that first checks
+  # that the file has enough details to go through init.
+  # Then use return nil unless ...
+  # def self.fabricate(a, b, c)
+  #   aa = a if a.is_a? Integer
+  #   bb = b if b.is_a? String
+  #   cc = c if c.is_a? Integer || c.is_a? Float
+  #   return nil unless aa && bb && cc
+  #   new(aa, bb, cc)
+  # end
 
   def initialize(this_file, id)
     # initialise instance variables (that persist with the class instance)
@@ -202,7 +214,7 @@ class NPNote
         end
       rescue EOFError # this file is empty so ignore it
         puts "  Error: note #{this_file} is empty, so ignoring it.".colorize(WarningColour)
-        # @@@ actually need to reject the file and this object entirely. Not sure how as this is in the constructor!
+        # TODO: Ideally need to reject the file and this object entirely.
       rescue StandardError => e
         puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
       end
@@ -238,7 +250,7 @@ class NPNote
     title_colour = GoalColour if @is_goal
     title_colour = ProjectColour if @is_project
     due_date_fmtd = @due_date ? relative_date(@due_date) : ''
-    completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT) : ''
+    completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT_SCREEN) : ''
     # format next review to be relative (or blank if note is complete)
     next_review_date_fmtd = @next_review_date && !@is_completed ? relative_date(@next_review_date) : ''
     if @is_completed
@@ -274,18 +286,6 @@ class NPNote
     print "\n"
   end
 
-  def print_summary_to_file
-    # print summary of this note in one line as a CSV file line
-    mark = '[x]'
-    mark = '[ ]' if @is_active
-    mark = '[-]' if @is_cancelled
-    due_date_fmtd = @due_date ? @due_date.strftime(DATE_FORMAT) : ''
-    completed_date_fmtd = @completed_date ? @completed_date.strftime(DATE_FORMAT) : ''
-    next_review_date_fmtd = @next_review_date ? @next_review_date.strftime(DATE_FORMAT) : ''
-    out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, @title, @open, @waiting, @done, due_date_fmtd, completed_date_fmtd, @review_interval, next_review_date_fmtd)
-    puts out
-  end
-
   def open_note
     # Use x-callback scheme to open this note in NotePlan,
     # as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
@@ -308,7 +308,7 @@ class NPNote
     # Would prefer to use the following sorts of method, but can't get them to work.
     # Asked at https://stackoverflow.com/questions/57161971/how-to-make-x-callback-url-call-to-local-app-in-ruby but no response.
     #   uriEncoded = URI.escape(uri)
-    #   response = open(uriEncoded).read  # TODO not yet working: no such file
+    #   response = open(uriEncoded).read  # not yet working: "no such file"
     #   req = Net::HTTP::Get.new(uriEncoded)
     #   response = http.request(req)
   end
@@ -414,6 +414,10 @@ class NPNote
     end
   end
 end
+
+#-------------------------------------------------------------------------
+# Non-class functions
+#-------------------------------------------------------------------------
 
 def relative_date(date)
   # Return rough relative string version of difference between date and today.
@@ -543,7 +547,6 @@ until quit
         # next unless notes[i].is_active && !notes[i].is_cancelled
 
         # add to relevant lists (arrays) of categories of notes
-        # TODO: review the logic here. "Friends 2020" landed in Not Active and ActiveReviewed lists
         n = notes[i]
         notes_completed.push(n.id) if n.is_completed
         notes_cancelled.push(n.id) if n.is_cancelled
@@ -716,21 +719,31 @@ until quit
     end
 
   when 's'
-    # write out the unordered summary to summaryFilename, temporarily redirecting stdout
+    # write out the unordered summary to summary_filename, temporarily redirecting stdout
     # using 'w' mode which will truncate any existing file
-    Dir.chdir(NP_SUMMARIES_DIR) # TODO: should check directory exists first
-    sf = File.open(summaryFilename, 'w')
-    old_stdout = $stdout
-    $stdout = sf
-    puts "# NotePlan Notes summary, #{timeNow}"
-    notes_all_ordered.each(&:print_summary_to_file)
-
-    puts
-    puts "= #{notes_to_review.count} to review, #{notes_other_active.count} also active, and #{notes_completed.count} archived notes."
-
-    $stdout = old_stdout
-    sf.close
-    puts '    Written summary to ' + summaryFilename.to_s.bold
+    begin
+      Dir.chdir(NP_SUMMARIES_DIR)
+      sf = File.open(summary_filename, 'w')
+      sf.puts "# NotePlan Notes summary, #{timeNow}"
+      sf.puts "Title, Open tasks, Waiting tasks, Done tasks, Due date, Completed date, Review interval, Next review date"
+      notes_all_ordered.each do |n|
+        # print summary of this note in one line as a CSV file line
+        mark = '[x]'
+        mark = '[ ]' if n.is_active
+        mark = '[-]' if n.is_cancelled
+        due_date_fmtd = n.due_date ? n.due_date.strftime(DATE_FORMAT_FILE) : ''
+        completed_date_fmtd = n.completed_date ? n.completed_date.strftime(DATE_FORMAT_FILE) : ''
+        next_review_date_fmtd = n.next_review_date ? n.next_review_date.strftime(DATE_FORMAT_FILE) : ''
+        out = format('%s %s,%d,%d,%d,%s,%s,%s,%s', mark, n.title, n.open, n.waiting, n.done, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
+        sf.puts out
+      end
+      sf.puts
+      sf.puts "= #{notes_to_review.count} to review, #{notes_other_active.count} also active, and #{notes_completed.count} completed notes."
+      sf.close
+      puts '    Written summary to ' + summary_filename.to_s.bold
+    rescue StandardError => e
+      puts "ERROR: Hit #{e.exception.message} when trying to write out summary file #{summary_filename}".colorize(WarningColour)
+    end
 
   when 't'
     # go and run the tools script, npTools, which defaults to all files changed in last 24 hours

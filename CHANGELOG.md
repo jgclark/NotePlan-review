@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.15, 16.10.2020
+- [Change] Small improvements, and fix to presentation of completed and cancelled tasks
+
 ## v1.2.14, 15.10.2020
 - [New] Ability to filter which notes are reviewed (issue 11)
 
