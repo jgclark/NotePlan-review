@@ -165,23 +165,23 @@ class NPNote
         @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @lastReviewDate = Date.parse(m.join) }
         @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
 
-        # default to treating note as active, unless #archive is set
-        @is_active = (@metadata_line =~ /#archive/) ? false : true
         # make completed if @completed_date set
         @is_completed = true unless @completed_date.nil?
         # make cancelled if #cancelled or #someday flag set
         @is_cancelled = true if @metadata_line =~ /(#cancelled|#someday)/
-        # make to_review if review date set and before today
-        @to_review = true if @next_review_date && (nrd <= TodaysDate)
+        # set note to non-active if #archive is set, or cancelled, completed.
+        @is_active = false if (@metadata_line == /#archive/ || @is_completed || @is_cancelled)
+        # puts "For #{@title} #{@is_active?'Active':''} #{@is_completed?'Completed':''} #{@is_cancelled?'Cancelled':''}"
 
-        # If an active task and review interval is set, calc next review date.
-        # If no last review date set, assume we need to review today.
-        if @review_interval && @is_active
-          @next_review_date = if @lastReviewDate
-                                calc_next_review(@lastReviewDate, @review_interval)
-                              else
-                                TodaysDate
-                              end
+        # if an active task, then work out reviews
+        if @is_active
+          # make to_review if review date set and before today (and active)
+          @to_review = true if @next_review_date && (nrd <= TodaysDate)
+          # If an active task and review interval is set, calc next review date.
+          # If no last review date set, assume we need to review today.
+          if @review_interval
+            @next_review_date = !@lastReviewDate.nil? ? calc_next_review(@lastReviewDate, @review_interval) : TodaysDate
+          end
         end
 
         # Note if this is a #project or #goal
@@ -202,7 +202,7 @@ class NPNote
         end
       rescue EOFError # this file is empty so ignore it
         puts "  Error: note #{this_file} is empty, so ignoring it.".colorize(WarningColour)
-        # @@@ actually need to reject the file and this object entirely
+        # @@@ actually need to reject the file and this object entirely. Not sure how as this is in the constructor!
       rescue StandardError => e
         puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
       end
@@ -371,7 +371,7 @@ class NPNote
                         else
                           TodaysDate
                         end
-    puts "  Updated review date in object for #{@filename}."
+    puts "  Updated review date for '#{@filename}'."
   end
 
   def list_waiting_tasks
@@ -473,7 +473,7 @@ if ARGV.count.positive?
       # paths.each do |path|
       #   # puts " Found matching folder #{path}"
       # end
-      glob_to_use += '{' + paths.join(',').gsub('/','') + '}/*.{md,txt}'
+      glob_to_use += '{' + paths.join(',').gsub('/', '') + '}/*.{md,txt}'
     else
       # puts " Found no matching folders for #{glob_path pattern}. Will match all filenames across folders instead."
       glob_to_use = '[!@]**/*' + ARGV[0] + '*.{md,txt}'
@@ -540,19 +540,20 @@ until quit
     begin
       Dir.glob(glob_to_use).each do |this_file|
         notes[i] = NPNote.new(this_file, i)
-        puts "#{i} #{this_file} #{notes[i].filename}"
         # next unless notes[i].is_active && !notes[i].is_cancelled
 
         # add to relevant lists (arrays) of categories of notes
         # TODO: review the logic here. "Friends 2020" landed in Not Active and ActiveReviewed lists
-        nrd = notes[i].next_review_date
-        if nrd && (nrd <= TodaysDate) && !notes[i].is_completed && !notes[i].is_cancelled # TODO: better way to exclude last two?
-          notes_to_review.push(notes[i].id) # Save list of ID of notes overdue for review
-        else
-          notes_other_active.push(notes[i].id) # Save list of in-active notes
+        n = notes[i]
+        notes_completed.push(n.id) if n.is_completed
+        notes_cancelled.push(n.id) if n.is_cancelled
+        if n.is_active
+          if n.next_review_date && (n.next_review_date <= TodaysDate)
+            notes_to_review.push(n.id) # Save list of ID of notes overdue for review
+          else
+            notes_other_active.push(n.id) # Save list of in-active notes
+          end
         end
-        notes_completed.push(notes[i].id) if notes[i].is_completed
-        notes_cancelled.push(notes[i].id) if notes[i].is_cancelled
         i += 1
       end
     rescue StandardError => e
@@ -577,20 +578,18 @@ until quit
     #     status_order[a.status] <=> status_order[b.status]
     #   end
     # }
-    # FIXME: can get to nil here with an empty note
     notes_other_active_ord = notes_other_active.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date.strftime(SORTING_DATE_FORMAT) + notes[s].title : notes[s].title }
 
     # Now output the notes with ones needing review first,
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_completed.count.positive? || notes_cancelled.count.positive?
-      # FIXME: Streaming Video showing here, but not Garden Patio
       puts 'Not Active'.bold + ' -------------------------------------------------------------------------------------'
-      notes_completed.each do |n|
-        notes_all_ordered[n].print_summary
+      notes_completed.each do |id|
+        notes[id].print_summary
       end
-      notes_cancelled.each do |n|
-        notes_all_ordered[n].print_summary
+      notes_cancelled.each do |id|
+        notes[id].print_summary
       end
     end
     puts 'Active and Reviewed'.bold + ' ----------------------------------------------------------------------------'
@@ -602,7 +601,7 @@ until quit
       notes[n].print_summary
     end
     puts '------------------------------------------------------------------------------------------------'
-    puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, and #{notes_completed.count} archived"
+    puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
 
   when 'v'
     # Show all notes to review
@@ -612,7 +611,8 @@ until quit
       notes[n].print_summary
     end
     # show summary count
-    puts "     (Total: #{notes_to_review.count} notes)".colorize(ActiveColour)
+    puts '------------------------------------------------------------------------------------------------'
+    puts "     #{notes_to_review.count} notes to review"
 
   when 'h'
     # go and run the statistics script, npStats
@@ -756,7 +756,7 @@ until quit
 
   # now ask what to do
   print "\nCommands: re-read & show (a)ll, (e)dit note, s(h)ow stats, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
-  print "\n(q)uit, (r)eview next, (s)ave summary, (t) run tools, (v) review list, (w)aiting tasks  > ".colorize(InstructionColour)
+  print "\n(q)uit, (r)eview next, (s)ave summary, run (t)ools, (v) review list, (w)aiting tasks > ".colorize(InstructionColour)
   ARGV.clear # required for 'gets' in the next line not to barf if an ARGV was supplied
   input = gets
   verb = input[0].downcase
