@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.16, 21.10.2020
+- [Fix] Now better handle blank note file, or those with less than 2 lines
+
 ## v1.2.15, 16.10.2020
 - [Change] Small improvements, and fix to presentation of completed and cancelled tasks
 

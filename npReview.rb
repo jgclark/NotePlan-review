@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.15, 16.10.2020
+# by Jonathan Clark, v1.2.16, 21.10.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,7 +31,8 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.15'.freeze
+VERSION = '1.2.16'.freeze
+# FIXME: not picking up 'rHire' or 'rAdvent' OK
 # TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
 # TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
 #                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
@@ -124,22 +125,11 @@ class NPNote
   attr_reader :done
   attr_reader :filename
 
-  # TODO: Ideally turn the init into a self.fabricate function that first checks
-  # that the file has enough details to go through init.
-  # Then use return nil unless ...
-  # def self.fabricate(a, b, c)
-  #   aa = a if a.is_a? Integer
-  #   bb = b if b.is_a? String
-  #   cc = c if c.is_a? Integer || c.is_a? Float
-  #   return nil unless aa && bb && cc
-  #   new(aa, bb, cc)
-  # end
-
   def initialize(this_file, id)
     # initialise instance variables (that persist with the class instance)
     @filename = this_file
     @id = id
-    @title = nil
+    @title = ''
     @is_active = true # assume note is active
     @is_completed = false
     @is_cancelled = false
@@ -214,10 +204,26 @@ class NPNote
             end
           end
         end
-      rescue EOFError # this file is empty so ignore it
-        puts "  Error: note #{this_file} is empty, so ignoring it.".colorize(WarningColour)
+      rescue EOFError # this file has less than two lines, so treat as empty
+        puts "  Error: note filename '#{this_file}' is empty, so setting to not active.".colorize(WarningColour)
+        @title = '<blank>' if @title.empty?
+        @is_active = false
+
+        # NOTE: Alternative approach to this blank-file problem:
+        # Ideally turn the init into a self.fabricate function that first checks
+        # that the file has enough details to go through init.
+        # Then use return nil unless ...
+        # def self.fabricate(a, b, c)
+        #   aa = a if a.is_a? Integer
+        #   bb = b if b.is_a? String
+        #   cc = c if c.is_a? Integer || c.is_a? Float
+        #   return nil unless aa && bb && cc
+        #   new(aa, bb, cc)
+        # end
+
       rescue StandardError => e
-        puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
+        puts "Exiting with ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
+        exit
       end
     end
   end
