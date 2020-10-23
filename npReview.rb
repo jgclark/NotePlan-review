@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.15, 16.10.2020
+# by Jonathan Clark, v1.2.16, 17.10.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,8 +31,9 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.15'.freeze
-# TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
+VERSION = '1.2.16'.freeze
+# TODO: rationalise summary lines to fit better with npStats. 
+#  So, 86 / 87 'active' notes. G8, P26, O56 notes (incl.2c2c) / G8, P24, O55 notes
 # TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
 #                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
 
@@ -688,7 +689,7 @@ until quit
       notes_other_active_ord.push(noteID)
       # Run Tools on this file
       begin
-        success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
+        success = system('ruby', TOOLS_SCRIPT_PATH, '-q', notes[noteID].filename)
       rescue StandardError
         puts '  Error trying to run tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
       end
@@ -710,7 +711,7 @@ until quit
         notes_other_active_ord.push(noteID)
         # Run Tools on this file
         begin
-          success = system('ruby', TOOLS_SCRIPT_PATH, notes[noteID].filename)
+          success = system('ruby', TOOLS_SCRIPT_PATH, '-q', notes[noteID].filename) # run quietly (-q flag)
         rescue StandardError
           puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
         end
@@ -752,7 +753,7 @@ until quit
   when 't'
     # go and run the tools script, npTools, which defaults to all files changed in last 24 hours
     begin
-      success = system('ruby', TOOLS_SCRIPT_PATH)
+      success = system('ruby', TOOLS_SCRIPT_PATH, '-q') # run quietly (-q flag)
     rescue StandardError
       puts '  Error trying to run npTools script -- please check it has been configured in TOOLS_SCRIPT_PATH'.colorize(WarningColour)
     end
