@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.2.17, 25.10.2020
+- [Improve] Now better string matching used on 'e' and 'r' commands
+
 ## v1.2.16, 21.10.2020
 - [Fix] Now better handle blank note file, or those with less than 2 lines
 

@@ -1,11 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-<<<<<<< HEAD
-# by Jonathan Clark, v1.2.16, 17.10.2020
-=======
-# by Jonathan Clark, v1.2.16, 21.10.2020
->>>>>>> 9086e1170e0bbe630fd5a7b577fab8985db79122
+# by Jonathan Clark, v1.2.17, 25.10.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,18 +27,12 @@
 # Can also show a list of projects, and run related npStats and npTools scripts
 # from its related GitHub projects.
 #
-# Requires gems fuzzy_match and colorize (> gem install fuzzy_match colorize)
+# Requires gems colorize, optparse etc. (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.16'.freeze
-<<<<<<< HEAD
-# TODO: rationalise summary lines to fit better with npStats. 
-#  So, 86 / 87 'active' notes. G8, P26, O56 notes (incl.2c2c) / G8, P24, O55 notes
-=======
-# FIXME: not picking up 'rHire' or 'rAdvent' OK
+VERSION = '1.2.17'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
->>>>>>> 9086e1170e0bbe630fd5a7b577fab8985db79122
 # TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
 #                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
 
@@ -50,7 +40,7 @@ require 'date'
 require 'time'
 require 'open-uri'
 require 'etc' # for login lookup
-require 'fuzzy_match'
+# require 'fuzzy_match'
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
@@ -466,6 +456,42 @@ def relative_date(date)
   return out # this is implied
 end
 
+def white_similarity(str1, str2)
+  # Use Simon White's algorithm to calculate string similarity, that performs better
+  # than standard libraries from fuzzy_match and amatch gems. For details see
+  # https://stackoverflow.com/questions/653157/a-better-similarity-ranking-algorithm-for-variable-length-strings
+  str1d = str1.downcase
+  pairs1 = (0..str1d.length - 2).collect { |i| str1d[i, 2]}.reject { |pair| pair.include? ' ' }
+  str2d = str2.downcase
+  pairs2 = (0..str2d.length - 2).collect { |i| str2d[i, 2]}.reject { |pair| pair.include? ' ' }
+  union = pairs1.size + pairs2.size
+  intersection = 0
+  pairs1.each do |p1|
+    0.upto(pairs2.size-1) do |i|
+      next if p1 != pairs2[i]
+
+      intersection += 1
+      pairs2.slice!(i)
+    end
+  end
+  (2.0 * intersection) / union # return implied
+end
+
+def white_match(needle, haystack_array)
+  # Use the Simon White algorithm to compare the 'needle' with a set of strings in the 'haystack_array'
+  # Returns the best match as the relevant array item
+  largest_result = best_match = i = 0
+  haystack_array.each do |ai|
+    i += 1
+    r = white_similarity(needle, ai)
+    if r > largest_result
+      largest_result = r
+      best_match = ai # the acual string
+    end
+  end
+  best_match #  haystack_array[best_match] # return implied
+end
+
 #-------------------------------------------------------------------------
 # Setup program options
 #-------------------------------------------------------------------------
@@ -526,7 +552,7 @@ notes_cancelled = [] # list of ID of cancelled notes
 notes_all_ordered = [] # list of IDs of all notes (used for summary writer)
 
 until quit
-  # get title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring') if present
+  # get title name by approx string matching on the rest of the input string (i.e. 'eMatchstring') if present
   if !input.empty?
     searchString = input[1..(input.length - 2)]
     # from list of titles, try and match
@@ -535,8 +561,10 @@ until quit
       titleList[i] = n.title
       i += 1
     end
-    fm = FuzzyMatch.new(titleList)
-    best_match = fm.find(searchString)
+    # Deprecating this in favour of Simon White algorithm
+    # fm = FuzzyMatch.new(titleList) 
+    # best_match = fm.find(searchString)
+    best_match = white_match(searchString, titleList)
   else
     best_match = nil
   end
@@ -605,7 +633,7 @@ until quit
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_completed.count.positive? || notes_cancelled.count.positive?
-      puts 'Not Active'.bold + ' -------------------------------------------------------------------------------------'
+      puts 'Not Active'.bold + ' ----------------------------------------------------------------------------------'
       notes_completed.each do |id|
         notes[id].show_summary_line
       end
@@ -613,27 +641,27 @@ until quit
         notes[id].show_summary_line
       end
     end
-    puts 'Active and Reviewed'.bold + ' ----------------------------------------------------------------------------'
+    puts 'Active and Reviewed'.bold + ' -------------------------------------------------------------------------'
     notes_other_active_ord.each do |n|
       notes[n].show_summary_line
     end
-    puts 'Ready to review'.bold + ' --------------------------------------------------------------------------------'
+    puts 'Ready to review'.bold + ' -----------------------------------------------------------------------------'
     notes_to_review_ord.each do |n|
       notes[n].show_summary_line
     end
-    puts '------------------------------------------------------------------------------------------------'
+    puts '---------------------------------------------------------------------------------------------'
     puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
 
-  when 'v'
-    # Show all notes to review
-    puts HEADER_LINE.bold
-    puts 'Ready to review'.bold + ' --------------------------------------------------------------------------------'
-    notes_to_review_ord.each do |n|
-      notes[n].show_summary_line
+  when 'e'
+    # edit the note
+    # use approx-string-matched title name (i.e. 'eMatchstring')
+    if best_match
+      puts "   Opening closest match note '#{best_match}'"
+      noteID = titleList.find_index(best_match)
+      notes[noteID].open_note
+    else
+      puts "   Warning: Couldn't find a note matching '#{searchString}'".colorize(WarningColour)
     end
-    # show summary count
-    puts '------------------------------------------------------------------------------------------------'
-    puts "     #{notes_to_review.count} notes to review"
 
   when 'h'
     # go and run the statistics script, npStats
@@ -641,17 +669,6 @@ until quit
       success = system('ruby', STATS_SCRIPT_PATH)
     rescue StandardError
       puts '  Error trying to run npStats script -- please check it has been configured in STATS_SCRIPT_PATH'.colorize(WarningColour)
-    end
-
-  when 'e'
-    # edit the note
-    # use title name fuzzy matching on the rest of the input string (i.e. 'eMatchstring')
-    if best_match
-      puts "   Opening closest match note '#{best_match}'"
-      noteID = titleList.find_index(best_match)
-      notes[noteID].open_note
-    else
-      puts "   Warning: Couldn't find a note matching '#{searchString}'".colorize(WarningColour)
     end
 
   when 'l'
@@ -772,9 +789,20 @@ until quit
       puts '  Error trying to run npTools script -- please check it has been configured in TOOLS_SCRIPT_PATH'.colorize(WarningColour)
     end
 
+  when 'v'
+    # Show all notes to review
+    puts HEADER_LINE.bold
+    puts 'Ready to review'.bold + ' -----------------------------------------------------------------------------'
+    notes_to_review_ord.each do |n|
+      notes[n].show_summary_line
+    end
+    # show summary count
+    puts '---------------------------------------------------------------------------------------------'
+    puts "     #{notes_to_review.count} notes to review"
+
   when 'w'
     # list @waiting items in open notes
-    puts "\n------------------------------------ #Waiting Tasks ---------------------------------------"
+    puts "\n-------------------------------------- #Waiting Tasks ---------------------------------------"
     notes_to_review_ord.each do |n|
       notes[n].list_waiting_tasks
     end
