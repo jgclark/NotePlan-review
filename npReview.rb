@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.17, 25.10.2020
+# by Jonathan Clark, v1.2.18, 29.10.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,7 +31,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.17'.freeze
+VERSION = '1.2.18'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
 # TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
 #                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
@@ -480,10 +480,14 @@ end
 def white_match(needle, haystack_array)
   # Use the Simon White algorithm to compare the 'needle' with a set of strings in the 'haystack_array'
   # Returns the best match as the relevant array item
-  largest_result = best_match = i = 0
+  if needle.empty?
+    puts "ERROR: Trying to use white_match for an empty search term.".colorize(WarningColour)
+  end
+
+  largest_result = best_match = 0
   haystack_array.each do |ai|
-    i += 1
     r = white_similarity(needle, ai)
+    puts "w_m(#{needle},#{ai})->#{r}"
     if r > largest_result
       largest_result = r
       best_match = ai # the acual string
@@ -553,20 +557,15 @@ notes_all_ordered = [] # list of IDs of all notes (used for summary writer)
 
 until quit
   # get title name by approx string matching on the rest of the input string (i.e. 'eMatchstring') if present
-  if !input.empty?
+  if input.length > 1
     searchString = input[1..(input.length - 2)]
-    # from list of titles, try and match
-    i = 0
-    notes.each do |n|
-      titleList[i] = n.title
-      i += 1
-    end
-    # Deprecating this in favour of Simon White algorithm
+    # From list of titles, try and match
+    # (Deprecating this in favour of Simon White algorithm)
     # fm = FuzzyMatch.new(titleList) 
     # best_match = fm.find(searchString)
     best_match = white_match(searchString, titleList)
   else
-    best_match = nil
+    best_match = ''
   end
 
   # Decide what Command to run ...
@@ -605,6 +604,14 @@ until quit
       end
     rescue StandardError => e
       puts "ERROR: Hit #{e.exception.message} when reading note file #{this_file}".colorize(WarningColour)
+    end
+
+    # (re)Create list of note titles
+    titleList.clear
+    i = 0
+    notes.each do |n|
+      titleList[i] = n.title
+      i += 1
     end
 
     # Order notes by different fields
@@ -655,7 +662,7 @@ until quit
   when 'e'
     # edit the note
     # use approx-string-matched title name (i.e. 'eMatchstring')
-    if best_match
+    if !best_match.empty?
       puts "   Opening closest match note '#{best_match}'"
       noteID = titleList.find_index(best_match)
       notes[noteID].open_note
@@ -704,9 +711,10 @@ until quit
     break
 
   when 'r'
-    if best_match
+    if !best_match.empty?
       # If extra characters given, then open the next title that best matches the characters
       noteID = titleList.find_index(best_match)
+puts "#{noteID}: #{best_match}"
       print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
       notes[noteID].open_note
       gets
@@ -816,8 +824,8 @@ until quit
 
   # now ask what to do
   print "\nCommands: re-read & show (a)ll, (e)dit note, s(h)ow stats, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
-  print "\n(q)uit, (r)eview next, (s)ave summary, run (t)ools, (v) review list, (w)aiting tasks > ".colorize(InstructionColour)
+  print "\n(q)uit, (r)eview next, (s)ave summary, run (t)ools, re(v)iew list, (w)aiting tasks > ".colorize(InstructionColour)
   ARGV.clear # required for 'gets' in the next line not to barf if an ARGV was supplied
-  input = gets
+  input = gets.chomp! # get input from command line, and take off LF
   verb = input[0].downcase
 end
