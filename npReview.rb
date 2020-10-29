@@ -451,7 +451,11 @@ def relative_date(date)
   else
     out = "#{(diff / 365.0).round} yrs"
   end
-  out += ' ago' if is_past
+  if is_past
+    out += ' ago'
+  else
+    out = 'in ' + out
+  end
   # return out # this is implied
 end
 
