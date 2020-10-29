@@ -173,7 +173,7 @@ class NPNote
         # make cancelled if #cancelled or #someday flag set
         @is_cancelled = true if @metadata_line =~ /(#cancelled|#someday)/
         # set note to non-active if #archive is set, or cancelled, completed.
-        @is_active = false if (@metadata_line == /#archive/ || @is_completed || @is_cancelled)
+        @is_active = false if @metadata_line == /#archive/ || @is_completed || @is_cancelled
         # puts "For #{@title} #{@is_active?'Active':''} #{@is_completed?'Completed':''} #{@is_cancelled?'Cancelled':''}"
 
         # if an active task, then work out reviews
@@ -219,7 +219,6 @@ class NPNote
         #   return nil unless aa && bb && cc
         #   new(aa, bb, cc)
         # end
-
       rescue StandardError => e
         puts "Exiting with ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
         exit
@@ -342,7 +341,7 @@ class NPNote
     # and add new last_review_date(<today>)
     metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})"
     # then remove multiple consecutive spaces which seem to creep in, with just one
-    metadata.gsub!(%r{\s{2,12}}, ' ')
+    metadata.gsub!(/\s{2,12}/, ' ')
 
     # in the rest of the lines, do some clean up:
     n = 2
@@ -453,7 +452,7 @@ def relative_date(date)
     out = "#{(diff / 365.0).round} yrs"
   end
   out += ' ago' if is_past
-  return out # this is implied
+  # return out # this is implied
 end
 
 def white_similarity(str1, str2)
@@ -467,7 +466,7 @@ def white_similarity(str1, str2)
   union = pairs1.size + pairs2.size
   intersection = 0
   pairs1.each do |p1|
-    0.upto(pairs2.size-1) do |i|
+    0.upto(pairs2.size - 1) do |i|
       next if p1 != pairs2[i]
 
       intersection += 1
@@ -480,14 +479,11 @@ end
 def white_match(needle, haystack_array)
   # Use the Simon White algorithm to compare the 'needle' with a set of strings in the 'haystack_array'
   # Returns the best match as the relevant array item
-  if needle.empty?
-    puts "ERROR: Trying to use white_match for an empty search term.".colorize(WarningColour)
-  end
+  puts 'ERROR: Trying to use white_match for an empty search term.'.colorize(WarningColour) if needle.empty?
 
   largest_result = best_match = 0
   haystack_array.each do |ai|
     r = white_similarity(needle, ai)
-    puts "w_m(#{needle},#{ai})->#{r}"
     if r > largest_result
       largest_result = r
       best_match = ai # the acual string
@@ -561,7 +557,7 @@ until quit
     searchString = input[1..(input.length - 2)]
     # From list of titles, try and match
     # (Deprecating this in favour of Simon White algorithm)
-    # fm = FuzzyMatch.new(titleList) 
+    # fm = FuzzyMatch.new(titleList)
     # best_match = fm.find(searchString)
     best_match = white_match(searchString, titleList)
   else
@@ -714,7 +710,6 @@ until quit
     if !best_match.empty?
       # If extra characters given, then open the next title that best matches the characters
       noteID = titleList.find_index(best_match)
-puts "#{noteID}: #{best_match}"
       print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
       notes[noteID].open_note
       gets
