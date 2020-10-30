@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.3.0, 30.10.2020
+- [Change] Now default to using the sandbox location for CloudKit storage (change from NotePlan 3.0.15 beta)
+
 ## v1.2.17, 25.10.2020
 - [Improve] Now better string matching used on 'e' and 'r' commands
 

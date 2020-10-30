@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.2.18, 29.10.2020
+# by Jonathan Clark, v1.3.0, 30.10.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,7 +31,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.2.18'.freeze
+VERSION = '1.3.0'.freeze
 # TODO: rationalise summary lines to fit better with npStats. So, 86 / 87 'active' notes.
 # TODO: this reports Goals: 82open + 2w + ?f / Stats->75 +2w +7f
 #                 Projects: 96 o + 9w +?f / 76 o + 9w 18f
@@ -63,9 +63,9 @@ STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
 NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               elsif STORAGE_TYPE == 'CloudKit'
-                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
+                "/Users/#{USERNAME}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3" # (new location from NP3.0.15 beta)
               else
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents"
               end
 NP_NOTE_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_SUMMARIES_DIR = "/Users/#{USERNAME}/Dropbox/NPSummaries".freeze
