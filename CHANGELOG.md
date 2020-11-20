@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.3.0, 20.11.2020
+- _time for a GitHub release, so arbitrarily bumping this to v1.3.0_
+- [Change] When run npTools script now doesn't run quietly
 ## v1.2.17, 25.10.2020
 - [Improve] Now better string matching used on 'e' and 'r' commands
 
