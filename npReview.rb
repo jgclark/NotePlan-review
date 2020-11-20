@@ -51,13 +51,13 @@ USER_DIR = ENV['HOME'] # pull home directory from environment
 TOOLS_SCRIPT_PATH = "#{USER_DIR}/bin/npTools".freeze
 STATS_SCRIPT_PATH = "#{USER_DIR}/bin/npStats".freeze
 NP_SUMMARIES_DIR = "#{USER_DIR}/Dropbox/NPSummaries".freeze
+TODAYS_DATE = Date.today # defaults to %Y-%m-%d format. Can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 SUMMARY_FILENAME = TODAYS_DATE.strftime('%Y%m%d') + '_notes_summary.csv'
 
 #----------------------------------------------------------------------------------
 # Constants & other settings
 #----------------------------------------------------------------------------------
 timeNow = Time.now
-TODAYS_DATE = Date.today # defaults to %Y-%m-%d format. Can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
@@ -823,6 +823,9 @@ until quit
   print "\nCommands: re-read & show (a)ll, (e)dit note, s(h)ow stats, people (l)ist, (p)roject+goal lists,".colorize(InstructionColour)
   print "\n(q)uit, (r)eview next, (s)ave summary, run (t)ools, re(v)iew list, (w)aiting tasks > ".colorize(InstructionColour)
   ARGV.clear # required for 'gets' in the next line not to barf if an ARGV was supplied
-  input = gets.chomp! # get input from command line, and take off LF
+  loop do
+    input = gets.chomp # get input from command line, and take off LF
+    break if !input.empty?
+  end
   verb = input[0].downcase
 end
