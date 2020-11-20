@@ -36,36 +36,37 @@ VERSION = '1.3.0'.freeze
 require 'date'
 require 'time'
 require 'open-uri'
-require 'etc' # for login lookup
-# require 'fuzzy_match'
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
-# Constants
+#----------------------------------------------------------------------------------
+# Setting variables for users to tweak
+#----------------------------------------------------------------------------------
 DATE_FORMAT_SCREEN = '%d.%m.%y'.freeze # use shorter form of years when writing to screen
 DATE_FORMAT_FILE = '%d.%m.%Y'.freeze # use full years for writing out to file
 SORTING_DATE_FORMAT = '%y%m%d'.freeze
-DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
-timeNow = Time.now
-TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
-EarlyDate = Date.new(1970, 1, 1)
-summary_filename = Date.today.strftime('%Y%m%d') + '_notes_summary.csv'
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@announce', '@oluo', '@jp', '@martha', '@church', '@liz', '@lizf'].freeze
+USERNAME = ENV['LOGNAME'] # pull username from environment
+USER_DIR = ENV['HOME'] # pull home directory from environment
+TOOLS_SCRIPT_PATH = "#{USER_DIR}/bin/npTools".freeze
+STATS_SCRIPT_PATH = "#{USER_DIR}/bin/npStats".freeze
+NP_SUMMARIES_DIR = "#{USER_DIR}/Dropbox/NPSummaries".freeze
+SUMMARY_FILENAME = TODAYS_DATE.strftime('%Y%m%d') + '_notes_summary.csv'
 
-# Setting variables to tweak
-USERNAME = 'jonathan'.freeze # set manually, as automated methods don't seek to work.
-MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@secretary', '@jp', '@martha', '@church', '@liz'].freeze
-TOOLS_SCRIPT_PATH = '/Users/jonathan/bin/npTools'.freeze
-STATS_SCRIPT_PATH = '/Users/jonathan/bin/npStats'.freeze
-STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or CloudKit or iCloud
-NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
-                "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
-              elsif STORAGE_TYPE == 'CloudKit'
-                "/Users/#{USERNAME}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
-              else
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
-              end
-NP_NOTE_DIR = "#{NP_BASE_DIR}/Notes".freeze
-NP_SUMMARIES_DIR = "/Users/#{USERNAME}/Dropbox/NPSummaries".freeze
+#----------------------------------------------------------------------------------
+# Constants & other settings
+#----------------------------------------------------------------------------------
+timeNow = Time.now
+TODAYS_DATE = Date.today # defaults to %Y-%m-%d format. Can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
+DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
+ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
+CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
+np_base_dir = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+np_base_dir = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
+NP_NOTE_DIR = "#{np_base_dir}/Notes".freeze
+HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -82,10 +83,7 @@ ReviewNotNeededColour = :light_black
 WarningColour = :light_red
 InstructionColour = :light_cyan
 
-# other constants
-HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
-
-# other globals
+# Globals
 notes = [] # to hold all our note objects
 
 #-------------------------------------------------------------------------
@@ -178,10 +176,10 @@ class NPNote
           # If an active task and review interval is set, calc next review date.
           # If no last review date set, assume we need to review today.
           if @review_interval
-            @next_review_date = !@last_review_date.nil? ? calc_next_review(@last_review_date, @review_interval) : TodaysDate
+            @next_review_date = !@last_review_date.nil? ? calc_next_review(@last_review_date, @review_interval) : TODAYS_DATE
           end
           # make to_review if review date set and before today (and active)
-          @to_review = true if @next_review_date && (@next_review_date <= TodaysDate)
+          @to_review = true if @next_review_date && (@next_review_date <= TODAYS_DATE)
         end
 
         # Note if this is a #project or #goal
@@ -274,13 +272,13 @@ class NPNote
     out_pt5 = format(' %-10s', next_review_date_fmtd)
     print out_pt1.colorize(title_colour)
     print out_pt2
-    if @due_date && @due_date < TodaysDate
+    if @due_date && @due_date < TODAYS_DATE
       print out_pt3.colorize(WarningColour)
     else
       print out_pt3
     end
     print out_pt4
-    if @next_review_date && @next_review_date < TodaysDate
+    if @next_review_date && @next_review_date < TODAYS_DATE
       print out_pt5.colorize(ReviewNeededColour)
     else
       print out_pt5.colorize(ReviewNotNeededColour)
@@ -299,15 +297,15 @@ class NPNote
     # fileName optional to identify a note by filename instead of title or date.
     #   Searches first general notes, then calendar notes for the filename.
     #   If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
-    # FIXME: probably here that emojis aren't working
-    uri = "noteplan://x-callback-url/openNote?noteTitle=#{@title}"
-    uriEncoded = URI.escape(uri, ' &') # by default & isn't escaped, so change that
+    # NB: need to URI.escape the title to make sure emojis are handled OK.
+    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle="+URI.escape(@title)
     begin
       response = `open "#{uriEncoded}"`
     rescue StandardError
       puts "  Error trying to open note with #{uriEncoded}".colorize(WarningColour)
     end
-    # Would prefer to use the following sorts of method, but can't get them to work.
+    # NB: URI.escape is deprecated. So would prefer to use the following sorts of method, 
+    # but can't get them to work:
     # Asked at https://stackoverflow.com/questions/57161971/how-to-make-x-callback-url-call-to-local-app-in-ruby but no response.
     #   uriEncoded = URI.escape(uri)
     #   response = open(uriEncoded).read  # not yet working: "no such file"
@@ -336,7 +334,7 @@ class NPNote
     metadata = lines[1]
     metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
     # and add new last_review_date(<today>)
-    metadata = "#{metadata.chomp} @reviewed(#{TodaysDate})"
+    metadata = "#{metadata.chomp} @reviewed(#{TODAYS_DATE})"
     # then remove multiple consecutive spaces which seem to creep in, with just one
     metadata.gsub!(/\s{2,12}/, ' ')
 
@@ -369,9 +367,9 @@ class NPNote
 
     # now update this date in the object, so the next display will be correct
     @next_review_date = if @last_review_date
-                          calc_next_review(TodaysDate, @review_interval)
+                          calc_next_review(TODAYS_DATE, @review_interval)
                         else
-                          TodaysDate
+                          TODAYS_DATE
                         end
     puts "  Updated review date for '#{@filename}'."
   end
@@ -397,12 +395,15 @@ class NPNote
   end
 
   def list_tag_mentions(tag)
-    # List any lines that @-mention the parameter
+    # List any lines that @-mention the parameter (unless tasks which are future, completed or cancelled)
     f = File.open(@filename, 'r')
     lines = []
     n = 0
     f.each_line do |line|
-      if (line =~ /#{tag}/) && !((line =~ /@done/) || (line =~ /\[x\]/) || (line =~ /\[-\]/))
+      scheduledDate = nil
+      line.scan(/>(\d\d\d\d\-\d\d-\d\d)/) { |m| scheduledDate = Date.parse(m.join) }
+      line_future = !scheduledDate.nil? && scheduledDate > TODAYS_DATE ? true : false
+      if (line =~ /#{tag}/) && !((line =~ /@done/) || line_future || (line =~ /\[x\]/) || (line =~ /\[-\]/))
         lines[n] = line
         n = + 1
       end
@@ -410,9 +411,9 @@ class NPNote
     f.close
     return unless n.positive?
 
-    puts "  # #{@title}"
+    puts "  #{@title}"
     lines.each do |line|
-      puts '    ' + line
+      puts '  ' + line
     end
   end
 end
@@ -428,7 +429,7 @@ def relative_date(date)
   # e.g. today, 3w ago, 2m, 4y ago.
   # Accepts date in normal Ruby Date type
   is_past = false
-  diff = (date - TodaysDate).to_i # need to cast to integer as otherwise it seems to be type rational
+  diff = (date - TODAYS_DATE).to_i # need to cast to integer as otherwise it seems to be type rational
   if diff.negative?
     diff = diff.abs
     is_past = true
@@ -543,11 +544,11 @@ quit = false
 verb = 'a' # get going by reading and summarising all notes
 input = ''
 searchString = best_match = nil
-titleList = []
+titleList = [] # list of all note titles
 notes_to_review = [] # list of ID of notes overdue for review
-notes_to_review_ord = []
+notes_to_review_ord = [] # ordered list of ID of notes overdue for review
 notes_other_active = [] # list of ID of other active notes
-notes_other_active_ord = []
+notes_other_active_ord = [] # ordered list of ID of other active notes
 notes_completed = [] # list of ID of archived notes
 notes_cancelled = [] # list of ID of cancelled notes
 notes_all_ordered = [] # list of IDs of all notes (used for summary writer)
@@ -591,7 +592,7 @@ until quit
         notes_completed.push(n.id) if n.is_completed
         notes_cancelled.push(n.id) if n.is_cancelled
         if n.is_active
-          if n.next_review_date && (n.next_review_date <= TodaysDate)
+          if n.next_review_date && (n.next_review_date <= TODAYS_DATE)
             notes_to_review.push(n.id) # Save list of ID of notes overdue for review
           else
             notes_other_active.push(n.id) # Save list of in-active notes
@@ -616,11 +617,11 @@ until quit
     # https://stackoverflow.com/questions/4610843/how-to-sort-an-array-of-objects-by-an-attribute-of-the-objects
     # https://stackoverflow.com/questions/827649/what-is-the-ruby-spaceship-operator
     # notes_all_ordered = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
-    notes_all_ordered = notes.sort_by { |s| s.due_date ? s.due_date : TodaysDate }
+    notes_all_ordered = notes.sort_by { |s| s.due_date ? s.due_date : TODAYS_DATE }
 
     # Following are more complicated, as the array is of _id_s, not actual NPNote objects
     # NB: nil entries will break any comparison.
-    notes_to_review_ord = notes_to_review.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date : TodaysDate }
+    notes_to_review_ord = notes_to_review.sort_by { |s| notes[s].next_review_date ? notes[s].next_review_date : TODAYS_DATE }
     # # Here's an example of sorting by two fields:
     # notes_to_review_ord = notes_to_review.sort{ |a,b|
     #   if a.status == b.status
@@ -680,7 +681,7 @@ until quit
     puts "\n----- Tags Mentioned ------------------------------------------------------------------"
     MENTIONS_TO_FIND.each do |p|
       puts
-      puts "#{p} mentions:".bold
+      puts "#{p} mentions:".bold.colorize(ProjectColour)
 
       notes_to_review_ord.each do |n|
         notes[n].list_tag_mentions(p)
@@ -711,7 +712,7 @@ until quit
     if !best_match.empty?
       # If extra characters given, then open the next title that best matches the characters
       noteID = titleList.find_index(best_match)
-      print 'Reviewing closest match note ' + best_match.to_s.bold + ' ...when finished press any key.'
+      print 'Reviewing closest match note ' + best_match.to_s.bold + '...when finished press any key > '
       notes[noteID].open_note
       gets
 
@@ -733,8 +734,8 @@ until quit
       loop do
         noteID = notes_to_review_ord.first
         notes[noteID].open_note
-        print 'Reviewing ' + notes[noteID].title.to_s.bold + " ...when finished press any key (or press 'r' to review next one)."
-        input = gets
+        print 'Reviewing ' + notes[noteID].title.to_s.bold + "...when finished press any key (or press 'r' to review next one) > "
+        input = gets 
         input1 = input[0].downcase
 
         # update the @reviewed() date for the note just reviewed
@@ -758,11 +759,11 @@ until quit
     end
 
   when 's'
-    # write out a summary of all notes to summary_filename, ordered by name
+    # write out a summary of all notes to SUMMARY_FILENAME, ordered by name
     # using 'w' mode which will truncate any existing file
     begin
       Dir.chdir(NP_SUMMARIES_DIR)
-      sf = File.open(summary_filename, 'w')
+      sf = File.open(SUMMARY_FILENAME, 'w')
       sf.puts "# NotePlan Notes summary, #{timeNow}"
       sf.puts 'Title, Open tasks, Waiting tasks, Done tasks, Start date, Due date, Completed date, Review interval, Next review date'
       notes_all_ordered.each do |n|
@@ -780,9 +781,9 @@ until quit
       sf.puts
       sf.puts "= #{notes_to_review.count} to review, #{notes_other_active.count} also active, and #{notes_completed.count} completed notes."
       sf.close
-      puts '    Written summary to ' + summary_filename.to_s.bold
+      puts '    Written summary to ' + SUMMARY_FILENAME.to_s.bold
     rescue StandardError => e
-      puts "ERROR: Hit #{e.exception.message} when trying to write out summary file #{summary_filename}".colorize(WarningColour)
+      puts "ERROR: Hit #{e.exception.message} when trying to write out summary file #{SUMMARY_FILENAME}".colorize(WarningColour)
     end
 
   when 't'

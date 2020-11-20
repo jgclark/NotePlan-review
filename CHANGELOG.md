@@ -3,6 +3,12 @@
 ## v1.3.0, 20.11.2020
 - _time for a GitHub release, so arbitrarily bumping this to v1.3.0_
 - [Change] When run npTools script now doesn't run quietly
+- [Improve] Make configuration of data storage path automatic (prefering CloudKit > iCloud Drive > Dropbox if there are multiple of these set up)
+- [Improve] Improve display of 'People List' function, including removing any future tasks
+
+## 1.2.18, 30.10.2020
+- [Change] Now default to using the sandbox location for CloudKit storage (change from NotePlan 3.0.15 beta)
+
 ## v1.2.17, 25.10.2020
 - [Improve] Now better string matching used on 'e' and 'r' commands
 
