@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.3.0, 20.11.2020
+# by Jonathan Clark, v1.3.1, 1.1.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -31,13 +31,14 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.3.0'.freeze
+VERSION = '1.3.1'.freeze
 
 require 'date'
 require 'time'
-require 'open-uri'
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
+require "erb" # for url_encode
+include ERB::Util
 
 #----------------------------------------------------------------------------------
 # Setting variables for users to tweak
@@ -292,25 +293,18 @@ class NPNote
     #   noteplan://x-callback-url/openNote?noteTitle=...
     # Open a note identified by the title or date.
     # Parameters:
-    # noteDate optional to identify the calendar note in the format YYYYMMDD like '20180122'.
-    # noteTitle optional to identify the normal note by actual title.
-    # fileName optional to identify a note by filename instead of title or date.
-    #   Searches first general notes, then calendar notes for the filename.
-    #   If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
-    # NB: need to URI.escape the title to make sure emojis are handled OK.
-    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle="+URI.escape(@title)
+    # - noteDate optional to identify the calendar note in the format YYYYMMDD like '20180122'.
+    # - noteTitle optional to identify the normal note by actual title.
+    # - fileName optional to identify a note by filename instead of title or date.
+    #     Searches first general notes, then calendar notes for the filename.
+    #     If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
+    # NB: need to URL encode the title to make sure & and emojis are handled OK.
+    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle="+url_encode(@title)
     begin
       response = `open "#{uriEncoded}"`
     rescue StandardError
       puts "  Error trying to open note with #{uriEncoded}".colorize(WarningColour)
     end
-    # NB: URI.escape is deprecated. So would prefer to use the following sorts of method, 
-    # but can't get them to work:
-    # Asked at https://stackoverflow.com/questions/57161971/how-to-make-x-callback-url-call-to-local-app-in-ruby but no response.
-    #   uriEncoded = URI.escape(uri)
-    #   response = open(uriEncoded).read  # not yet working: "no such file"
-    #   req = Net::HTTP::Get.new(uriEncoded)
-    #   response = http.request(req)
   end
 
   def update_last_review_date
@@ -434,27 +428,27 @@ def relative_date(date)
     diff = diff.abs
     is_past = true
   end
-  if diff.zero?
-    out = 'today'
-  elsif diff == 1
-    out = "#{diff} day"
+  if diff == 1
+    output = "#{diff} day"
   elsif diff < 9
-    out = "#{diff} days"
+    output = "#{diff} days"
   elsif diff < 12
-    out = "#{(diff / 7.0).round} wk"
+    output = "#{(diff / 7.0).round} wk"
   elsif diff < 29
-    out = "#{(diff / 7.0).round} wks"
+    output = "#{(diff / 7.0).round} wks"
   elsif diff < 550
-    out = "#{(diff / 30.4).round} mon"
+    output = "#{(diff / 30.4).round} mon"
   else
-    out = "#{(diff / 365.0).round} yrs"
+    output = "#{(diff / 365.0).round} yrs"
   end
-  if is_past
-    out += ' ago'
+  if diff.zero?
+    output = 'today'
+  elsif is_past
+    output += ' ago'
   else
-    out = 'in ' + out
+    output = 'in ' + output
   end
-  # return out # this is implied
+  # return output # this is implied
 end
 
 def white_similarity(str1, str2)

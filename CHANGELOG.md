@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.3.1, 1.1.2021
+- [Fix] Couldn't open right note with a `&` in the title (issue 13)
+
 ## v1.3.0, 20.11.2020
 - _time for a GitHub release, so arbitrarily bumping this to v1.3.0_
 - [Change] When run npTools script now doesn't run quietly
