@@ -696,6 +696,8 @@ until quit
     notes_all_ordered.each do |n|
       n.show_summary_line  if n.is_goal
     end
+    puts '---------------------------------------------------------------------------------------------'
+    puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
 
   when 'q'
     # quit the utility
