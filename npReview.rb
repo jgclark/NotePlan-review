@@ -298,13 +298,13 @@ class NPNote
     #   Searches first general notes, then calendar notes for the filename.
     #   If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
     # NB: need to URI.escape the title to make sure emojis are handled OK.
-    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle="+URI.escape(@title)
+    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle=" + URI.escape(@title)
     begin
       response = `open "#{uriEncoded}"`
     rescue StandardError
       puts "  Error trying to open note with #{uriEncoded}".colorize(WarningColour)
     end
-    # NB: URI.escape is deprecated. So would prefer to use the following sorts of method, 
+    # NB: URI.escape is deprecated. So would prefer to use the following sorts of method,
     # but can't get them to work:
     # Asked at https://stackoverflow.com/questions/57161971/how-to-make-x-callback-url-call-to-local-app-in-ruby but no response.
     #   uriEncoded = URI.escape(uri)
@@ -735,7 +735,7 @@ until quit
         noteID = notes_to_review_ord.first
         notes[noteID].open_note
         print 'Reviewing ' + notes[noteID].title.to_s.bold + "...when finished press any key (or press 'r' to review next one) > "
-        input = gets 
+        input = gets
         input1 = input[0].downcase
 
         # update the @reviewed() date for the note just reviewed
