@@ -4,13 +4,14 @@
 # by Jonathan Clark, v1.3.0, 20.11.2020
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
-# open up each one that needs reviewing in turn in NotePlan. When continuing the
-# script, it automatically updates the last @reviewed(date).
+# open up each one that needs reviewing in turn in NotePlan.
+# When continuing the script, it automatically updates the last @reviewed(date).
+#
 # It also provides basic statistics on the number of open / waiting / closed tasks.
 #
-# Assumes first line of a NP project file is just a markdown-formatted title
+# It assumes first line of a NP project file is just a markdown-formatted title
 # and second line contains metadata items:
-# - any #hashtags, particularly #Pnn and #active
+# - any #hashtags, particularly #active and #archive
 # - any @start(), @due(), @complete(), @reviewed() dates, of form YYYY-MM-DD,
 #   but other forms can be parsed as well
 # - a @review_interval() field, using terms like '2m', '1w'
@@ -245,7 +246,7 @@ class NPNote
   def show_summary_line
     # Pretty print a summary for this NP note to screen
     mark = '[ ]'
-    title_trunc = @title[0..37]
+    title_trunc = !@title.empty? ? @title[0..37] : "[#{@filename[0..35]}]"
     title_colour = NormalColour
     title_colour = GoalColour if @is_goal
     title_colour = ProjectColour if @is_project
