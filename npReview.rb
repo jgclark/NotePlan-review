@@ -731,7 +731,7 @@ until quit
         noteID = notes_to_review_ord.first
         notes[noteID].open_note
         print 'Reviewing ' + notes[noteID].title.to_s.bold + "...when finished press any key (or press 'r' to review next one) > "
-        input = gets 
+        input = gets
         input1 = input[0].downcase
 
         # update the @reviewed() date for the note just reviewed
