@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.3.1, 1.1.2021
+# by Jonathan Clark, v1.4.0, 26.2.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan. When continuing the
@@ -19,7 +19,7 @@
 # - inactive
 #   - cancelled (noted with the #cancelled or #someday tag)
 #   - completed (noted with the @completed(date) or @finished(date) mention)
-# - active  =  any note that isn't inactive!
+# - active  =  any note that isn't inactive **and has a @review interval**!
 #
 # From NotePlan v2.4 it also covers notes in sub-directories, but ignores notes
 # in the special @Archive and @Trash sub-directories (or others beginning @).
@@ -31,7 +31,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.3.1'.freeze
+VERSION = '1.4.0'.freeze
 
 require 'date'
 require 'time'
@@ -59,6 +59,7 @@ SUMMARY_FILENAME = TODAYS_DATE.strftime('%Y%m%d') + '_notes_summary.csv'
 # Constants & other settings
 #----------------------------------------------------------------------------------
 timeNow = Time.now
+MAX_WIDTH = 93 # Max screen width to use
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
@@ -69,6 +70,14 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 NP_NOTE_DIR = "#{np_base_dir}/Notes".freeze
 HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
+#----------------------------------------------------------------------------------
+# Regex Definitions
+RE_DATES_FLEX_MATCH = '([0-9\.\-/]{6,10})' # matches dates of a number of forms
+RE_REVIEW_INTERVALS = '[0-9]+[dDwWmMqQ]'
+RE_REVIEW_WITH_INTERVALS_MATCH = '@review\(('+RE_REVIEW_INTERVALS+')\)'
+RE_COMPLETED_TASK_MARKER = '\s\[x\]\s'
+
+#----------------------------------------------------------------------------------
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
@@ -84,6 +93,7 @@ ReviewNotNeededColour = :light_black
 WarningColour = :light_red
 InstructionColour = :light_cyan
 
+#----------------------------------------------------------------------------------
 # Globals
 notes = [] # to hold all our note objects
 
@@ -92,7 +102,7 @@ notes = [] # to hold all our note objects
 #-------------------------------------------------------------------------
 # NPNote Class reflects a stored NP note, and gives following methods:
 # - initialize
-# - calc_next_review
+# - calc_offset_date
 # - show_summary_line
 # - open_note
 # - update_last_review_date
@@ -125,7 +135,7 @@ class NPNote
     @filename = this_file
     @id = id
     @title = ''
-    @is_active = true # assume note is active
+    @is_active = false # assume note is not active
     @is_completed = false
     @is_cancelled = false
     @start_date = nil
@@ -158,30 +168,35 @@ class NPNote
 
         # Now process line 2 (rest of metadata)
         # the following regex matches returns an array with one item, so make a string (by join), and then parse as a date
-        @metadata_line.scan(%r{@start\(([0-9\-\./]{6,10})\)}) { |m|  @start_date = Date.parse(m.join) }
-        @metadata_line.scan(%r{(@end|@due)\(([0-9\-\./]{6,10})\)}) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
-        @metadata_line.scan(%r{(@completed|@finished)\(([0-9\-\./]{6,10})\)}) { |m| @completed_date = Date.parse(m.join) }
-        @metadata_line.scan(%r{@reviewed\(([0-9\-\./]{6,10})\)}) { |m| @last_review_date = Date.parse(m.join) }
-        @metadata_line.scan(/@review\(([0-9]+[dDwWmMqQ])\)/) { |m| @review_interval = m.join.downcase }
-
+        @metadata_line.scan(/@start\(#{RE_DATES_FLEX_MATCH}\)/) { |m|  @start_date = Date.parse(m.join) }
+        @metadata_line.scan(/(@end|@due)\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
+        @metadata_line.scan(/(@completed|@finished)\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @completed_date = Date.parse(m.join) }
+        @metadata_line.scan(/@reviewed\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @last_review_date = Date.parse(m.join) }
+        @metadata_line.scan(/#{RE_REVIEW_WITH_INTERVALS_MATCH}/) { |m| @review_interval = m.join.downcase }
+        
         # make completed if @completed_date set
         @is_completed = true unless @completed_date.nil?
         # make cancelled if #cancelled or #someday flag set
         @is_cancelled = true if @metadata_line =~ /(#cancelled|#someday)/
+
+        # OLDER LOGIC:
         # set note to non-active if #archive is set, or cancelled, completed.
-        @is_active = false if @metadata_line == /#archive/ || @is_completed || @is_cancelled
-        # puts "For #{@title} #{@is_active?'Active':''} #{@is_completed?'Completed':''} #{@is_cancelled?'Cancelled':''}"
+        # @is_active = false if @metadata_line == /#archive/ || @is_completed || @is_cancelled
+        # NEWER LOGIC:
+        # set note to active if #active is set or a @review date found, and not complete/cancelled
+        @is_active = true if (@metadata_line =~ /#active/ || !@review_interval.nil?) && !@is_cancelled && !@is_completed
 
         # if an active task, then work out reviews
         if @is_active
           # If an active task and review interval is set, calc next review date.
           # If no last review date set, assume we need to review today.
-          if @review_interval
-            @next_review_date = !@last_review_date.nil? ? calc_next_review(@last_review_date, @review_interval) : TODAYS_DATE
+          unless @review_interval.nil?
+            @next_review_date = !@last_review_date.nil? ? calc_offset_date(@last_review_date, @review_interval) : TODAYS_DATE
           end
           # make to_review if review date set and before today (and active)
           @to_review = true if @next_review_date && (@next_review_date <= TODAYS_DATE)
         end
+        # puts "For #{@title}:  #{@is_active?'Active':''} #{@is_completed?'Completed':''} #{@is_cancelled?'Cancelled':''} #{@review_interval} #{@last_review_date} #{@next_review_date}"
 
         # Note if this is a #project or #goal
         @is_project = true if @metadata_line =~ /#project/
@@ -189,7 +204,7 @@ class NPNote
 
         # Now read through rest of file, counting number of open, waiting, done tasks
         f.each_line do |line|
-          if line =~ /\[x\]/ # a completed task
+          if line =~ /#{RE_COMPLETED_TASK_MARKER}/ # a completed task
             @done += 1
           elsif line =~ /^\s*\*\s+/ && line !~ /\[-\]/ # a task, but (by implication) not completed or cancelled
             if line =~ /#waiting/
@@ -200,7 +215,7 @@ class NPNote
           end
         end
       rescue EOFError # this file has less than two lines, so treat as empty
-        puts "  Error: note filename '#{this_file}' is empty, so setting to not active.".colorize(WarningColour)
+        puts "  Warning: note filename '#{this_file}' is empty, so setting to not active.".colorize(WarningColour)
         @title = '<blank>' if @title.empty?
         @is_active = false
 
@@ -220,27 +235,6 @@ class NPNote
         exit
       end
     end
-  end
-
-  def calc_next_review(last, interval)
-    # Calculate next review date, assuming interval is of form nn[dwmq]
-    daysToAdd = 0
-    unit = interval[-1]
-    num = interval.chop.to_i
-    case unit
-    when 'd'
-      daysToAdd = num
-    when 'w'
-      daysToAdd = num * 7
-    when 'm'
-      daysToAdd = num * 30
-    when 'q'
-      daysToAdd = num * 90
-    else
-      puts "Error in calc_next_review from #{last} by #{interval}".colorize(WarningColour)
-    end
-    newDate = last + daysToAdd
-    newDate
   end
 
   def show_summary_line
@@ -332,16 +326,6 @@ class NPNote
     # then remove multiple consecutive spaces which seem to creep in, with just one
     metadata.gsub!(/\s{2,12}/, ' ')
 
-    # in the rest of the lines, do some clean up:
-    n = 2
-    while n < line_count
-      # remove any #waiting tags on complete tasks
-      lines[n].gsub!(/ #waiting/, '') if (lines[n] =~ /#waiting/) && (lines[n] =~ /\[x\]/)
-      # blank any lines which just have a * or -
-      lines[n] = '' if lines[n] =~ /^\s*[\*\-]\s*$/
-      n += 1
-    end
-
     # open file and write all this data out
     begin
       File.open(@filename, 'w') do |ff|
@@ -361,7 +345,7 @@ class NPNote
 
     # now update this date in the object, so the next display will be correct
     @next_review_date = if @last_review_date
-                          calc_next_review(TODAYS_DATE, @review_interval)
+                          calc_offset_date(TODAYS_DATE, @review_interval)
                         else
                           TODAYS_DATE
                         end
@@ -374,7 +358,7 @@ class NPNote
     lines = []
     n = 0
     f.each_line do |line|
-      if (line =~ /#waiting/) && !((line =~ /@done/) || (line =~ /\[x\]/) || (line =~ /\[-\]/))
+      if (line =~ /#waiting/) && !((line =~ /@done/) || (line =~ /#{RE_COMPLETED_TASK_MARKER}/) || (line =~ /\[-\]/))
         lines[n] = line
         n = + 1
       end
@@ -397,7 +381,7 @@ class NPNote
       scheduledDate = nil
       line.scan(/>(\d\d\d\d\-\d\d-\d\d)/) { |m| scheduledDate = Date.parse(m.join) }
       line_future = !scheduledDate.nil? && scheduledDate > TODAYS_DATE ? true : false
-      if (line =~ /#{tag}/) && !((line =~ /@done/) || line_future || (line =~ /\[x\]/) || (line =~ /\[-\]/))
+      if (line =~ /#{tag}/) && !((line =~ /@done/) || line_future || (line =~ /#{RE_COMPLETED_TASK_MARKER}/) || (line =~ /\[-\]/))
         lines[n] = line
         n = + 1
       end
@@ -415,6 +399,41 @@ end
 #-------------------------------------------------------------------------
 # Non-class functions
 #-------------------------------------------------------------------------
+
+def calc_offset_date(old_date, interval)
+  # Calculate next review date, assuming:
+  # - old_date is type
+  # - interval is string of form nn[bdwmq]
+  #   - where 'b' is weekday (i.e. Monday-Friday in English)
+  # puts "    c_o_d: old #{old_date} interval #{interval} ..."
+  days_to_add = 0
+  unit = interval[-1] # i.e. get last characters
+  num = interval.chop.to_i
+  case unit
+  when 'b' # week days
+    # Method from Arjen at https://stackoverflow.com/questions/279296/adding-days-to-a-date-but-excluding-weekends
+    # Avoids looping, and copes with negative intervals too
+    current_day_of_week = old_date.strftime("%u").to_i  # = day of week with Monday = 0, .. Sunday = 6
+    dayOfWeek = num.negative? ? (current_day_of_week - 12).modulo(7) : (current_day_of_week + 6).modulo(7)
+    num -= 1 if dayOfWeek == 6
+    num += 1 if dayOfWeek == -6
+    days_to_add = num + (num + dayOfWeek).div(5) * 2
+  when 'd'
+    days_to_add = num
+  when 'w'
+    days_to_add = num * 7
+  when 'm'
+    days_to_add = num * 30 # on average. Better to use >> operator, but it only works for months
+  when 'q'
+    days_to_add = num * 91 # on average
+  when 'y'
+    days_to_add = num * 365 # on average
+  else
+    puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
+  end
+  # puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add"
+  return old_date + days_to_add
+end
 
 def relative_date(date)
   # Return rough relative string version of difference between date and today.
@@ -449,6 +468,16 @@ def relative_date(date)
     output = 'in ' + output
   end
   # return output # this is implied
+end
+
+def show_section_divider(title)
+  # Print out a divider prefixed by section text, adapting to defined screen width
+  puts title.bold + ' ' + '-'*(MAX_WIDTH - (title.size) - 1)
+end
+
+def show_simple_divider
+  # Print out a very simple full-width divider
+  puts '-'*MAX_WIDTH
 end
 
 def white_similarity(str1, str2)
@@ -526,7 +555,7 @@ if ARGV.count.positive?
 else
   glob_to_use = '{[!@]**/*,*}.{txt,md}'
 end
-puts "Starting npReview for files matching pattern(s) #{glob_to_use}."
+puts "Running npReview v#{VERSION} for files matching pattern(s) #{glob_to_use}."
 
 #=======================================================================================
 # Main loop
@@ -589,7 +618,7 @@ until quit
           if n.next_review_date && (n.next_review_date <= TODAYS_DATE)
             notes_to_review.push(n.id) # Save list of ID of notes overdue for review
           else
-            notes_other_active.push(n.id) # Save list of in-active notes
+            notes_other_active.push(n.id) # Save list of other active notes
           end
         end
         i += 1
@@ -632,7 +661,7 @@ until quit
     # then ones which are active, then the rest
     puts HEADER_LINE.bold
     if notes_completed.count.positive? || notes_cancelled.count.positive?
-      puts 'Not Active'.bold + ' ----------------------------------------------------------------------------------'
+      show_section_divider('Not Active')
       notes_completed.each do |id|
         notes[id].show_summary_line
       end
@@ -640,15 +669,15 @@ until quit
         notes[id].show_summary_line
       end
     end
-    puts 'Active and Reviewed'.bold + ' -------------------------------------------------------------------------'
+    show_section_divider('Active and Reviewed')
     notes_other_active_ord.each do |n|
       notes[n].show_summary_line
     end
-    puts 'Ready to review'.bold + ' -----------------------------------------------------------------------------'
+    show_section_divider('Ready to review')
     notes_to_review_ord.each do |n|
       notes[n].show_summary_line
     end
-    puts '---------------------------------------------------------------------------------------------'
+    show_simple_divider
     puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
 
   when 'e'
@@ -667,7 +696,7 @@ until quit
     begin
       success = system('ruby', STATS_SCRIPT_PATH)
     rescue StandardError
-      puts '  Error trying to run npStats script -- please check it has been configured in STATS_SCRIPT_PATH'.colorize(WarningColour)
+      puts '  Error trying to run npStats script: please check it has been configured in STATS_SCRIPT_PATH'.colorize(WarningColour)
     end
 
   when 'l'
@@ -696,7 +725,7 @@ until quit
     notes_all_ordered.each do |n|
       n.show_summary_line  if n.is_goal
     end
-    puts '---------------------------------------------------------------------------------------------'
+    show_simple_divider
     puts "     #{notes_to_review.count} notes to review, #{notes_other_active.count} active, #{notes_completed.count} completed, and #{notes_cancelled.count} cancelled"
 
   when 'q'
@@ -798,7 +827,7 @@ until quit
       notes[n].show_summary_line
     end
     # show summary count
-    puts '---------------------------------------------------------------------------------------------'
+    show_simple_divider
     puts "     #{notes_to_review.count} notes to review"
 
   when 'w'
