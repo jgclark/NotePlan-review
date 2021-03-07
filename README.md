@@ -1,7 +1,7 @@
 # NotePlan Review
 `npReview.rb` is a command-line script to help a user review their projects held in [NotePlan app](https://noteplan.co/), along the lines of [David Allen](https://gettingthingsdone.com/resources)'s *Getting Things Done* "weekly review" methodology.
 
-<img src="https://preview.redd.it/f3fz0ssis6w41.png?width=992&format=png&auto=webp&s=980924da69ecd9ec22485e780e4e5be556f23ae1">
+<img src="npReview-20210210.jpg">
 
 It assumes that some of the note files (not calendar files) are used for tasks and/or projects with some additional structure that it can find and process.
 

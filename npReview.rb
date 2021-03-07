@@ -72,7 +72,7 @@ NP_NOTE_DIR = "#{np_base_dir}/Notes".freeze
 HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
 #----------------------------------------------------------------------------------
-# Regex Definitions
+# Regex Definitions. NB: These need to be enclosed in single quotes, not double quotes!
 RE_DATES_FLEX_MATCH = '([0-9\.\-/]{6,10})' # matches dates of a number of forms
 RE_REVIEW_INTERVALS = '[0-9]+[dDwWmMqQ]'
 RE_REVIEW_WITH_INTERVALS_MATCH = '@review\(('+RE_REVIEW_INTERVALS+')\)'
