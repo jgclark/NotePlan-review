@@ -1,7 +1,7 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.0, 26.2.2021
+# by Jonathan Clark, v1.4.1, 218.11.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -32,7 +32,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.4.0'.freeze
+VERSION = '1.4.1'.freeze
 
 require 'date'
 require 'time'
@@ -562,8 +562,8 @@ puts "Running npReview v#{VERSION} for files matching pattern(s) #{glob_to_use}.
 # Main loop
 #=======================================================================================
 
-# Now start interactive loop offering a couple of actions:
-# save summary file, open note in NP
+# Now start interactive loop offering the various actions
+
 quit = false
 verb = 'a' # get going by reading and summarising all notes
 input = ''
@@ -607,6 +607,7 @@ until quit
     # Read metadata for all note files in the NotePlan directory
     # (and sub-directories from v2.5, ignoring special ones starting '@')
     begin
+      Dir.chdir(NP_NOTE_DIR)
       Dir.glob(glob_to_use).each do |this_file|
         notes[i] = NPNote.new(this_file, i)
         # next unless notes[i].is_active && !notes[i].is_cancelled
@@ -627,6 +628,7 @@ until quit
     rescue StandardError => e
       puts "ERROR: Hit #{e.exception.message} when reading note file #{this_file}".colorize(WarningColour)
     end
+    puts "-> #{i} notes"
 
     # (re)Create list of note titles
     titleList.clear
@@ -786,13 +788,14 @@ until quit
 
   when 's'
     # write out a summary of all notes to SUMMARY_FILENAME, ordered by name
+    notes_all_ordered_alpha = notes.sort_by(&:title) # simple comparison, as defaults to alphanum sort
     # using 'w' mode which will truncate any existing file
     begin
       Dir.chdir(NP_SUMMARIES_DIR)
       sf = File.open(SUMMARY_FILENAME, 'w')
       sf.puts "# NotePlan Notes summary, #{timeNow}"
       sf.puts 'Title, Open tasks, Waiting tasks, Done tasks, Start date, Due date, Completed date, Review interval, Next review date'
-      notes_all_ordered.each do |n|
+      notes_all_ordered_alpha.each do |n|
         # print summary of this note in one line as a CSV file line
         mark = '[x]'
         mark = '[ ]' if n.is_active
@@ -801,13 +804,14 @@ until quit
         due_date_fmtd = n.due_date ? n.due_date.strftime(DATE_FORMAT_FILE) : ''
         completed_date_fmtd = n.completed_date ? n.completed_date.strftime(DATE_FORMAT_FILE) : ''
         next_review_date_fmtd = n.next_review_date ? n.next_review_date.strftime(DATE_FORMAT_FILE) : ''
-        out = format('%s %s,%d,%d,%d,%s,%s,%s,%s,%s', mark, n.title, n.open, n.waiting, n.done, start_date_fmtd, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
+        out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s,%s', mark, n.title, n.filename, n.open, n.waiting, n.done, start_date_fmtd, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
         sf.puts out
       end
       sf.puts
       sf.puts "= #{notes_to_review.count} to review, #{notes_other_active.count} also active, and #{notes_completed.count} completed notes."
       sf.close
       puts '    Written summary to ' + SUMMARY_FILENAME.to_s.bold
+      Dir.chdir(NP_NOTE_DIR)
     rescue StandardError => e
       puts "ERROR: Hit #{e.exception.message} when trying to write out summary file #{SUMMARY_FILENAME}".colorize(WarningColour)
     end

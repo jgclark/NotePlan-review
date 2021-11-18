@@ -1,4 +1,7 @@
 # CHANGELOG
+## v1.4.1, 18.11.2021
+- [Change] Pick up user-defined ruby installation, rather than the OS-set one.
+- [Fix] Working directory not reset after writing out Summary file
 
 ## v1.4.0, 26.2.2021
 - [Change] To cope with an expanding number of non-project notes, I've changed how it decides which notes to include in the lists. Rather than defaulting to all and then excluding some, it now includes only those which have an `@review(...)` indicator in the metadata at the start of the note. After all, this is about reviewing things.
