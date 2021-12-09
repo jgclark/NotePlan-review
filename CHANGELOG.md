@@ -1,4 +1,7 @@
 # CHANGELOG
+## v1.4.1, 18.11.2021
+- [Change] Pick up user-defined ruby installation, rather than the OS-set one.
+- [Fix] Working directory not reset after writing out Summary file
 
 ## [1.4.2] 2021-10-31
 - [Change] Switch to using `#!/usr/bin/env ruby` at top of script to make it easier to use different ruby installations that the built-in one.
