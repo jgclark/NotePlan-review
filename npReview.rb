@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.1, 218.11.2021
+# by Jonathan Clark, v1.4.2, 31.10.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -31,8 +31,9 @@
 # Requires gems colorize, optparse etc. (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
+# TODO: Take our Template, Reviews, Summaries directories.
 #----------------------------------------------------------------------------------
-VERSION = '1.4.1'.freeze
+VERSION = '1.4.2'.freeze
 
 require 'date'
 require 'time'
@@ -71,10 +72,11 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 NP_NOTE_DIR = "#{np_base_dir}/Notes".freeze
 HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
+
 #----------------------------------------------------------------------------------
 # Regex Definitions. NB: These need to be enclosed in single quotes, not double quotes!
 RE_DATES_FLEX_MATCH = '([0-9\.\-/]{6,10})' # matches dates of a number of forms
-RE_REVIEW_INTERVALS = '[0-9]+[dDwWmMqQ]'
+RE_REVIEW_INTERVALS = '[0-9]+[bBdDwWmMqQ]'
 RE_REVIEW_WITH_INTERVALS_MATCH = '@review\(('+RE_REVIEW_INTERVALS+')\)'
 RE_COMPLETED_TASK_MARKER = '\s\[x\]\s'
 

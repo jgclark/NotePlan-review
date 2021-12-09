@@ -62,3 +62,4 @@ glob-test.rb
 test-string-match.rb
 headers-list.txt
 *.code-workspace
+.history/*.*
