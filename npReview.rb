@@ -1,7 +1,7 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.1, 23.9.2021
+# by Jonathan Clark, v1.4.2, 31.10.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -31,8 +31,9 @@
 # Requires gems colorize, optparse etc. (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
+# TODO: Take our Template, Reviews, Summaries directories.
 #----------------------------------------------------------------------------------
-VERSION = '1.4.1'.freeze
+VERSION = '1.4.2'.freeze
 
 require 'date'
 require 'time'

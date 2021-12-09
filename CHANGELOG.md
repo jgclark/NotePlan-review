@@ -1,9 +1,12 @@
 # CHANGELOG
 
-## v1.4.0, 23.9.2021
+## [1.4.2] 2021-10-31
+- [Change] Switch to using `#!/usr/bin/env ruby` at top of script to make it easier to use different ruby installations that the built-in one.
+
+## [1.4.1] 2021-09-23
 - [Fix] The business day options (e.g. `12b`) now work as a review interval (thanks @kumo).
 
-## v1.4.0, 26.2.2021
+## [v1.4.0] 2021-02-26
 - [Change] To cope with an expanding number of non-project notes, I've changed how it decides which notes to include in the lists. Rather than defaulting to all and then excluding some, it now includes only those which have an `@review(...)` indicator in the metadata at the start of the note. After all, this is about reviewing things.
 - [Add] The `@review(interval)` now understands `b`usiness days (ignores weekends) as well as `d`ays.
 
