@@ -1,10 +1,13 @@
 # CHANGELOG
-## v1.4.1, 18.11.2021
-- [Change] Pick up user-defined ruby installation, rather than the OS-set one.
-- [Fix] Working directory not reset after writing out Summary file
+## v1.4.3, 10.12.2021
+- [Add] you can now set a list of folders to ignore using constant FOLDERS_TO_IGNORE
+- [Fix] when writing a (s)ummary output to CSV file, titles and filenames are quoted to hide any commas they contain
+- [Fix] when writing a (s)ummary output to CSV file, titles are now given for otherwise empty notes
+- [Change] when calling `npStats` script, it now uses the `-n` option to avoid writing output to its file
 
 ## [1.4.2] 2021-10-31
 - [Change] Switch to using `#!/usr/bin/env ruby` at top of script to make it easier to use different ruby installations that the built-in one.
+- [Fix] Working directory not reset after writing out Summary file
 
 ## [1.4.1] 2021-09-23
 - [Fix] The business day options (e.g. `12b`) now work as a review interval (thanks @kumo).

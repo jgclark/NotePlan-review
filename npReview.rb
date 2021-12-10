@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.2, 31.10.2021
+# by Jonathan Clark, v1.4.3, 10.12.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -31,9 +31,8 @@
 # Requires gems colorize, optparse etc. (> gem install fuzzy_match colorize)
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
-# TODO: Take our Template, Reviews, Summaries directories.
 #----------------------------------------------------------------------------------
-VERSION = '1.4.2'.freeze
+VERSION = '1.4.3'.freeze
 
 require 'date'
 require 'time'
@@ -56,6 +55,7 @@ STATS_SCRIPT_PATH = "#{USER_DIR}/bin/npStats".freeze
 NP_SUMMARIES_DIR = "#{USER_DIR}/Dropbox/NPSummaries".freeze
 TODAYS_DATE = Date.today # defaults to %Y-%m-%d format. Can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 SUMMARY_FILENAME = TODAYS_DATE.strftime('%Y%m%d') + '_notes_summary.csv'
+FOLDERS_TO_IGNORE = ['📋 Templates', 'Reviews', 'Summaries', 'TEST']
 
 #----------------------------------------------------------------------------------
 # Constants & other settings
@@ -161,22 +161,20 @@ class NPNote
     # Open file and read the first two lines, using a rescue block to catch file errors
     File.open(this_file) do |f|
       begin
-        headerLine = f.readline
-        @metadata_line = f.readline
-
-        # Now make a title for this file from first line
+        # Make a title for this file from first line
         # (but take off any heading characters at the start and starting and ending whitespace)
-        @title = headerLine.gsub!(/^#*\s*/, '')
-        @title = @title.gsub(/\s+$/, '')
+        headerLine = f.readline
+        @title = headerLine.gsub(/^#*\s*/, '').strip
 
-        # Now process line 2 (rest of metadata)
+        # Now read and process line 2 (rest of metadata)
+        @metadata_line = f.readline
         # the following regex matches returns an array with one item, so make a string (by join), and then parse as a date
         @metadata_line.scan(/@start\(#{RE_DATES_FLEX_MATCH}\)/) { |m|  @start_date = Date.parse(m.join) }
         @metadata_line.scan(/(@end|@due)\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @due_date = Date.parse(m.join) } # allow alternate form '@end(...)'
         @metadata_line.scan(/(@completed|@finished)\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @completed_date = Date.parse(m.join) }
         @metadata_line.scan(/@reviewed\(#{RE_DATES_FLEX_MATCH}\)/) { |m| @last_review_date = Date.parse(m.join) }
         @metadata_line.scan(/#{RE_REVIEW_WITH_INTERVALS_MATCH}/) { |m| @review_interval = m.join.downcase }
-        
+
         # make completed if @completed_date set
         @is_completed = true unless @completed_date.nil?
         # make cancelled if #cancelled or #someday flag set
@@ -218,7 +216,8 @@ class NPNote
           end
         end
       rescue EOFError # this file has less than two lines, so treat as empty
-        puts "  Warning: note filename '#{this_file}' is empty, so setting to not active.".colorize(WarningColour)
+        # TODO: Work on this as 1 line is valid (but not active)
+        puts "  Note: note '#{this_file}' is empty, so setting to not active."
         @title = '<blank>' if @title.empty?
         @is_active = false
 
@@ -523,7 +522,6 @@ end
 #-------------------------------------------------------------------------
 # Setup program options
 #-------------------------------------------------------------------------
-options = {}
 opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan Reviewer v#{VERSION}\nDetails at https://github.com/jgclark/NotePlan-review/\nUsage: npReview.rb [options] [file-pattern]"
   opts.separator ''
@@ -535,6 +533,7 @@ end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
 # Define the set of files that we're going to review.
+glob_folders_to_ignore = "@|" + FOLDERS_TO_IGNORE.join("|")
 Dir.chdir(NP_NOTE_DIR)
 if ARGV.count.positive?
   # We have a file pattern given, so restrict file globbing to use it
@@ -550,13 +549,13 @@ if ARGV.count.positive?
       glob_to_use += '{' + paths.join(',').gsub('/', '') + '}/*.{md,txt}'
     else
       # puts " Found no matching folders for #{glob_path pattern}. Will match all filenames across folders instead."
-      glob_to_use = '[!@]**/*' + ARGV[0] + '*.{md,txt}'
+      glob_to_use = '[!(' + glob_folders_to_ignore + ')]**/*' + ARGV[0] + '*.{md,txt}'
     end
   rescue StandardError => e
     puts "ERROR: #{e.exception.message} when reading in files matching pattern #{ARGV[0]}".colorize(WarningColour)
   end
 else
-  glob_to_use = '{[!@]**/*,*}.{txt,md}'
+  glob_to_use = '{[!(' + glob_folders_to_ignore + ')]**/*,*}.{txt,md}'
 end
 puts "Running npReview v#{VERSION} for files matching pattern(s) #{glob_to_use}."
 
@@ -699,7 +698,7 @@ until quit
   when 'h'
     # go and run the statistics script, npStats
     begin
-      success = system('ruby', STATS_SCRIPT_PATH)
+      success = system('ruby', STATS_SCRIPT_PATH, '-n')
     rescue StandardError
       puts '  Error trying to run npStats script: please check it has been configured in STATS_SCRIPT_PATH'.colorize(WarningColour)
     end
@@ -806,7 +805,8 @@ until quit
         due_date_fmtd = n.due_date ? n.due_date.strftime(DATE_FORMAT_FILE) : ''
         completed_date_fmtd = n.completed_date ? n.completed_date.strftime(DATE_FORMAT_FILE) : ''
         next_review_date_fmtd = n.next_review_date ? n.next_review_date.strftime(DATE_FORMAT_FILE) : ''
-        out = format('%s %s,%s,%d,%d,%d,%s,%s,%s,%s,%s', mark, n.title, n.filename, n.open, n.waiting, n.done, start_date_fmtd, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
+        # NB: quoting title and filename to hide any commas they contain
+        out = format('"%s %s","%s",%d,%d,%d,%s,%s,%s,%s,%s', mark, n.title, n.filename, n.open, n.waiting, n.done, start_date_fmtd, due_date_fmtd, completed_date_fmtd, n.review_interval, next_review_date_fmtd)
         sf.puts out
       end
       sf.puts
@@ -857,7 +857,7 @@ until quit
   ARGV.clear # required for 'gets' in the next line not to barf if an ARGV was supplied
   loop do
     input = gets.chomp # get input from command line, and take off LF
-    break if !input.empty?
+    break unless input.empty?
   end
   verb = input[0].downcase
 end
