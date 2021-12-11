@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.3, 10.12.2021
+# by Jonathan Clark, v1.4.4, 10.12.2021
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -32,7 +32,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.4.3'.freeze
+VERSION = '1.4.4'.freeze
 
 require 'date'
 require 'time'
@@ -72,12 +72,11 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 NP_NOTE_DIR = "#{np_base_dir}/Notes".freeze
 HEADER_LINE = "\n    Title                                  Open Wait Done Due        Completed  Next Review".freeze
 
-
 #----------------------------------------------------------------------------------
 # Regex Definitions. NB: These need to be enclosed in single quotes, not double quotes!
 RE_DATES_FLEX_MATCH = '([0-9\.\-/]{6,10})' # matches dates of a number of forms
 RE_REVIEW_INTERVALS = '[0-9]+[bBdDwWmMqQ]'
-RE_REVIEW_WITH_INTERVALS_MATCH = '@review\(('+RE_REVIEW_INTERVALS+')\)'
+RE_REVIEW_WITH_INTERVALS_MATCH = '@review\((' + RE_REVIEW_INTERVALS + ')\)'
 RE_COMPLETED_TASK_MARKER = '\s\[x\]\s'
 
 #----------------------------------------------------------------------------------
@@ -295,7 +294,7 @@ class NPNote
     #     Searches first general notes, then calendar notes for the filename.
     #     If its an absolute path outside NotePlan, it will copy the note into the database (only Mac).
     # NB: need to URL encode the title to make sure & and emojis are handled OK.
-    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle="+url_encode(@title)
+    uriEncoded = "noteplan://x-callback-url/openNote?noteTitle=" + url_encode(@title)
     begin
       response = `open "#{uriEncoded}"`
     rescue StandardError
@@ -308,6 +307,11 @@ class NPNote
     # Open the file for read-write
     begin
       f = File.open(@filename, 'r')
+    rescue StandardError => e
+      puts "ERROR: Hit #{e.exception.message} when updating last review date".colorize(WarningColour)
+      puts "Please run command (a) again."
+    else
+      # no error raised, so carry on here
       lines = []
       n = 0
       f.each_line do |line|
@@ -315,43 +319,41 @@ class NPNote
         n += 1
       end
       f.close
-      line_count = n
-    rescue StandardError => e
-      puts "ERROR: Hit #{e.exception.message} when updating last review date for file #{@filename}".colorize(WarningColour)
-    end
 
-    # in the metadata line, cut out the existing mention of last_review_date(...)
-    metadata = lines[1]
-    metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
-    # and add new last_review_date(<today>)
-    metadata = "#{metadata.chomp} @reviewed(#{TODAYS_DATE})"
-    # then remove multiple consecutive spaces which seem to creep in, with just one
-    metadata.gsub!(/\s{2,12}/, ' ')
+      # in the metadata line, cut out the existing mention of last_review_date(...)
+      metadata = lines[1]
+      metadata.gsub!(%r{@reviewed\([0-9\.\-/]+\)\s*}, '') # needs gsub! to replace multiple copies, and in place
+      # and add new last_review_date(<today>)
+      metadata = "#{metadata.chomp} @reviewed(#{TODAYS_DATE})"
+      # then remove multiple consecutive spaces which seem to creep in, with just one
+      metadata.gsub!(/\s{2,12}/, ' ')
 
-    # open file and write all this data out
-    begin
-      File.open(@filename, 'w') do |ff|
-        n = 0
-        lines.each do |line|
-          if n != 1
-            ff.puts line
-          else
-            ff.puts metadata
+      # open file and write all this data out
+      begin
+        File.open(@filename, 'w') do |ff|
+          n = 0
+          lines.each do |line|
+            if n != 1
+              ff.puts line
+            else
+              ff.puts metadata
+            end
+            n += 1
           end
-          n += 1
         end
+      rescue StandardError => e
+        puts "ERROR: Hit #{e.exception.message} when initializing note file".colorize(WarningColour)
+      else
+        # if no error, then continue here ...
+        # now update this date in the object, so the next display will be correct
+        @next_review_date = if @last_review_date
+                              calc_offset_date(TODAYS_DATE, @review_interval)
+                            else
+                              TODAYS_DATE
+                            end
+        puts "  Updated review date for '#{@filename}'."
       end
-    rescue StandardError => e
-      puts "ERROR: Hit #{e.exception.message} when initializing note file #{this_file}".colorize(WarningColour)
     end
-
-    # now update this date in the object, so the next display will be correct
-    @next_review_date = if @last_review_date
-                          calc_offset_date(TODAYS_DATE, @review_interval)
-                        else
-                          TODAYS_DATE
-                        end
-    puts "  Updated review date for '#{@filename}'."
   end
 
   def list_waiting_tasks
@@ -469,17 +471,17 @@ def relative_date(date)
   else
     output = 'in ' + output
   end
-  # return output # this is implied
+  return output
 end
 
 def show_section_divider(title)
   # Print out a divider prefixed by section text, adapting to defined screen width
-  puts title.bold + ' ' + '-'*(MAX_WIDTH - (title.size) - 1)
+  puts title.bold + ' ' + '-' * (MAX_WIDTH - title.size - 1)
 end
 
 def show_simple_divider
   # Print out a very simple full-width divider
-  puts '-'*MAX_WIDTH
+  puts '-' * MAX_WIDTH
 end
 
 def white_similarity(str1, str2)
@@ -580,6 +582,7 @@ notes_all_ordered = [] # list of IDs of all notes (used for summary writer)
 
 until quit
   # get title name by approx string matching on the rest of the input string (i.e. 'eMatchstring') if present
+  best_match = ''
   if input.length > 1
     searchString = input[1..(input.length - 2)]
     # From list of titles, try and match
@@ -587,8 +590,7 @@ until quit
     # fm = FuzzyMatch.new(titleList)
     # best_match = fm.find(searchString)
     best_match = white_match(searchString, titleList)
-  else
-    best_match = ''
+    best_match = '' if best_match.is_a?(Integer)
   end
 
   # Decide what Command to run ...
@@ -752,7 +754,7 @@ until quit
       notes_to_review_ord.delete(noteID)
       notes_other_active.push(noteID)
       notes_other_active_ord.push(noteID)
-      # Run Tools on this file
+      # Run npTools on this file
       begin
         success = system('ruby', TOOLS_SCRIPT_PATH, '-q', notes[noteID].filename)
       rescue StandardError
@@ -763,7 +765,7 @@ until quit
       loop do
         noteID = notes_to_review_ord.first
         notes[noteID].open_note
-        print 'Reviewing ' + notes[noteID].title.to_s.bold + "...when finished press any key (or press 'r' to review next one) > "
+        print 'Reviewing next note ' + notes[noteID].title.to_s.bold + "...when finished press any key (or press 'r' to review next one) > "
         input = gets
         input1 = input[0].downcase
 
@@ -774,11 +776,11 @@ until quit
         notes_to_review_ord.delete(noteID)
         notes_other_active.push(noteID)
         notes_other_active_ord.push(noteID)
-        # Run Tools on this file
+        # Run npTools on this file
         begin
           success = system('ruby', TOOLS_SCRIPT_PATH, '-q', notes[noteID].filename) # run quietly (-q flag)
         rescue StandardError
-          puts '  Error trying to tools '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
+          puts '  Error trying to run tools: '.colorize(WarningColour) + notes[noteID].title.to_s.colorize(WarningColour).bold
         end
         # repeat this if user types 'r' as the any key
         break if input1 != 'r'

@@ -1,4 +1,7 @@
 # CHANGELOG
+## v1.4.4, 11.12.2021
+- [Fix] fix edge case errors for (r)eview command
+
 ## v1.4.3, 10.12.2021
 - [Add] you can now set a list of folders to ignore using constant FOLDERS_TO_IGNORE
 - [Fix] when writing a (s)ummary output to CSV file, titles and filenames are quoted to hide any commas they contain
