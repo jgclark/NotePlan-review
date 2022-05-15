@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 #----------------------------------------------------------------------------------
 # NotePlan Review script
-# by Jonathan Clark, v1.4.4, 10.12.2021
+# by Jonathan Clark, v1.4.5, 15.5.2022
 #----------------------------------------------------------------------------------
 # The script shows a summary of the notes, grouped by status, with option to easily
 # open up each one that needs reviewing in turn in NotePlan.
@@ -32,7 +32,7 @@
 #----------------------------------------------------------------------------------
 # For more details, including issues, see GitHub project https://github.com/jgclark/NotePlan-review/
 #----------------------------------------------------------------------------------
-VERSION = '1.4.4'.freeze
+VERSION = '1.4.5'.freeze
 
 require 'date'
 require 'time'
@@ -47,7 +47,7 @@ include ERB::Util
 DATE_FORMAT_SCREEN = '%d.%m.%y'.freeze # use shorter form of years when writing to screen
 DATE_FORMAT_FILE = '%d.%m.%Y'.freeze # use full years for writing out to file
 SORTING_DATE_FORMAT = '%y%m%d'.freeze
-MENTIONS_TO_FIND = ['@admin', '@facilities', '@cws', '@cfl', '@email', '@announce', '@oluo', '@jp', '@martha', '@church', '@liz', '@lizf'].freeze
+MENTIONS_TO_FIND = ['@admin', '@facilities', '@rp', '@email', '@announce', '@oluo', '@jp', '@martha', '@church', '@liz', '@lizf'].freeze
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
 TOOLS_SCRIPT_PATH = "#{USER_DIR}/bin/npTools".freeze
@@ -55,7 +55,7 @@ STATS_SCRIPT_PATH = "#{USER_DIR}/bin/npStats".freeze
 NP_SUMMARIES_DIR = "#{USER_DIR}/Dropbox/NPSummaries".freeze
 TODAYS_DATE = Date.today # defaults to %Y-%m-%d format. Can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 SUMMARY_FILENAME = TODAYS_DATE.strftime('%Y%m%d') + '_notes_summary.csv'
-FOLDERS_TO_IGNORE = ['📋 Templates', 'Reviews', 'Summaries', 'TEST']
+FOLDERS_TO_IGNORE = ['Reviews', 'Summaries', 'TEST']
 
 #----------------------------------------------------------------------------------
 # Constants & other settings
@@ -546,11 +546,11 @@ if ARGV.count.positive?
     paths = Dir.glob(glob_path_pattern)
     if paths.count.positive?
       # paths.each do |path|
-      #   # puts " Found matching folder #{path}"
+      #   puts "  Found matching folder #{path}"
       # end
       glob_to_use += '{' + paths.join(',').gsub('/', '') + '}/*.{md,txt}'
     else
-      # puts " Found no matching folders for #{glob_path pattern}. Will match all filenames across folders instead."
+      puts "Found no matching folders for #{glob_path_pattern}. Will match all filenames across folders instead."
       glob_to_use = '[!(' + glob_folders_to_ignore + ')]**/*' + ARGV[0] + '*.{md,txt}'
     end
   rescue StandardError => e
